@@ -1,7 +1,8 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_pty/flutter_pty.dart';
 import 'package:xterm/xterm.dart';
 
@@ -12,6 +13,8 @@ class OutputPanel extends StatefulWidget {
   final String? initialCommand;
   final VoidCallback? onCommandExecuted;
   final VoidCallback? onCloseTerminal;
+  @visibleForTesting
+  final Pty Function(int columns, int rows, String? directory)? ptyFactory;
 
   const OutputPanel({
     super.key,
@@ -21,6 +24,7 @@ class OutputPanel extends StatefulWidget {
     this.initialCommand,
     this.onCommandExecuted,
     this.onCloseTerminal,
+    this.ptyFactory,
   });
 
   @override
@@ -31,19 +35,20 @@ class _OutputPanelState extends State<OutputPanel> {
   final terminal = Terminal(maxLines: 10000);
   final focusNode = FocusNode();
   Pty? pty;
+  StreamSubscription<String>? _outputSubscription;
 
   @override
   void initState() {
     super.initState();
-    focusNode.addListener(() {
-      // Terminal focus listener
-    });
     // Start PTY after first frame if visible
     if (widget.isVisible) {
       WidgetsBinding.instance.endOfFrame.then((_) {
-        if (mounted) _startPty();
+        if (!mounted) return;
+        _startPty();
+        focusNode.requestFocus();
       });
     }
+    if (widget.initialCommand != null) _runCommand(widget.initialCommand!);
   }
 
   @override
@@ -52,6 +57,7 @@ class _OutputPanelState extends State<OutputPanel> {
     // Start or restart PTY when terminal becomes visible
     if (widget.isVisible && !oldWidget.isVisible) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
         if (pty == null) {
           _startPty();
         }
@@ -74,18 +80,13 @@ class _OutputPanelState extends State<OutputPanel> {
   void _runCommand(String command) {
     // Always defer to avoid setState during build
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (pty == null) {
-        // PTY not ready yet, try again next frame
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (pty != null && mounted) {
-            pty!.write(Uint8List.fromList(utf8.encode('$command\n')));
-            widget.onCommandExecuted?.call();
-          }
-        });
-      } else {
-        pty!.write(Uint8List.fromList(utf8.encode('$command\n')));
-        widget.onCommandExecuted?.call();
-      }
+      if (!mounted || !widget.isVisible) return;
+      _startPty();
+      if (pty == null) return;
+      // A terminal's Enter key sends CR, including to Windows ConPTY.
+      pty!.write(Uint8List.fromList(utf8.encode('$command\r')));
+      focusNode.requestFocus();
+      widget.onCommandExecuted?.call();
     });
   }
 
@@ -102,19 +103,15 @@ class _OutputPanelState extends State<OutputPanel> {
       final columns = terminal.viewWidth > 0 ? terminal.viewWidth : 80;
       final rows = terminal.viewHeight > 0 ? terminal.viewHeight : 24;
 
-      pty = Pty.start(
-        shell,
-        columns: columns,
-        rows: rows,
-        workingDirectory: widget.workingDirectory,
-        environment: Platform.environment,
-      );
-      // PTY output → display in terminal
-      pty!.output.listen((data) {
-        final text = utf8.decode(data);
-        terminal.write(text);
-      });
-
+      pty =
+          widget.ptyFactory?.call(columns, rows, widget.workingDirectory) ??
+          Pty.start(
+            shell,
+            columns: columns,
+            rows: rows,
+            workingDirectory: widget.workingDirectory,
+            environment: Platform.environment,
+          );
       // Terminal input (keystrokes) → send to PTY
       terminal.onOutput = (data) {
         pty?.write(Uint8List.fromList(utf8.encode(data)));
@@ -124,12 +121,18 @@ class _OutputPanelState extends State<OutputPanel> {
       terminal.onResize = (width, height, pixelWidth, pixelHeight) {
         pty?.resize(height, width);
       };
+      // Decode across chunks: ConPTY may split a UTF-8 character between reads.
+      _outputSubscription = pty!.output
+          .cast<List<int>>()
+          .transform(const Utf8Decoder(allowMalformed: true))
+          .listen(terminal.write);
     } catch (e) {
       terminal.write('Failed to start terminal: $e\r\n');
     }
   }
 
   void _restartPty() {
+    _outputSubscription?.cancel();
     pty?.kill();
     pty = null;
     terminal.buffer.clear();
@@ -138,6 +141,7 @@ class _OutputPanelState extends State<OutputPanel> {
 
   @override
   void dispose() {
+    _outputSubscription?.cancel();
     pty?.kill();
     focusNode.dispose();
     super.dispose();
@@ -178,7 +182,9 @@ class _OutputPanelState extends State<OutputPanel> {
                   icon: Icons.delete_outline,
                   tooltip: 'Clear',
                   onPressed: () {
-                    pty?.write(Uint8List.fromList(utf8.encode("clear\n")));
+                    // Clear the view without injecting text into a running app.
+                    terminal.write('\x1b[2J\x1b[H');
+                    focusNode.requestFocus();
                   },
                 ),
                 _TerminalHeaderButton(
@@ -186,7 +192,6 @@ class _OutputPanelState extends State<OutputPanel> {
                   tooltip: 'Close Terminal',
                   onPressed: () {
                     widget.onCloseTerminal?.call();
-                    pty?.write(Uint8List.fromList(utf8.encode("clear\n")));
                   },
                 ),
               ],
@@ -198,9 +203,17 @@ class _OutputPanelState extends State<OutputPanel> {
               terminal,
               focusNode: focusNode,
               autofocus: true,
+              // Windows desktop keystrokes must reach ConPTY even when the
+              // editor's native WebView has interrupted the text-input client.
+              hardwareKeyboardOnly: Platform.isWindows,
+              onKeyEvent: (_, event) => event is KeyUpEvent
+                  ? KeyEventResult.handled
+                  : KeyEventResult.ignored,
+              padding: const EdgeInsets.all(8),
               textStyle: const TerminalStyle(
-                fontSize: 13,
-                fontFamily: 'monospace',
+                fontSize: 14,
+                height: 1.3,
+                fontFamily: 'Consolas',
               ),
             ),
           ),

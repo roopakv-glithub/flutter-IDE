@@ -4,12 +4,12 @@ A lightweight code editor built with Flutter, with a VS Code-inspired interface,
 
 ## Download for Windows
 
-[Download Flutter IDE 1.0.0 for Windows x64](https://github.com/roopakv-glithub/flutter-IDE/releases/download/v1.0.0-windows/Flutter-IDE-1.0.0-windows-x64.zip)
+[Download Flutter IDE 1.0.1 for Windows x64](https://github.com/roopakv-glithub/flutter-IDE/releases/download/v1.0.1-windows/Flutter-IDE-1.0.1-windows-x64.zip)
 
-[Release notes and SHA-256 checksum](https://github.com/roopakv-glithub/flutter-IDE/releases/tag/v1.0.0-windows)
+[Release notes and SHA-256 checksum](https://github.com/roopakv-glithub/flutter-IDE/releases/tag/v1.0.1-windows)
 
 1. Download the ZIP and choose **Extract All**.
-2. Open the extracted `Flutter-IDE-1.0.0-windows-x64` folder.
+2. Open the extracted `Flutter-IDE-1.0.1-windows-x64` folder.
 3. Double-click `flutter_ide.exe`.
 
 Keep all DLL files and the `data` folder beside the executable. Do not copy only the EXE or run it from inside the ZIP. You can share the complete ZIP with other Windows users.
@@ -35,6 +35,14 @@ This is an unsigned portable application, not an installer or Microsoft Store pa
 
 The **Source Control/Git sidebar** and **Pub.dev Packages sidebar**, including their service/API integrations, have been removed. Explorer, Terminal, Run, code editing, tabs, file operations, and Flutter project structure remain intact. Git and Flutter package commands can still be entered manually in the terminal when those tools are installed.
 
+## Terminal fixes in 1.0.1
+
+- Run returns keyboard focus to the terminal, including when it is already open.
+- Windows hardware-key input accepts letters, top-row digits, and numpad digits.
+- Commands use the terminal Enter character, and output decoding handles UTF-8 split across reads.
+- Clear and Close no longer inject shell commands into an active device prompt.
+- Consolas text, increased line spacing, and padding make the terminal easier to read.
+
 ## Build and run from source
 
 The Flutter project is at the repository root; there is no separate demo directory.
@@ -55,7 +63,7 @@ If the WebView plugin cannot download its native packages because your NuGet con
 ```powershell
 flutter pub get
 flutter analyze
-flutter build windows --release
+flutter build windows --release --build-name=1.0.1 --build-number=2
 ```
 
 The executable and its supporting files are generated in:
@@ -70,8 +78,9 @@ For distribution, bundle the executable, every required DLL, the complete `data`
 
 - `flutter pub get`: successful.
 - `flutter analyze`: zero errors and one existing warning for an unused `package:flutter/foundation.dart` import in `lib/services/file_service_io.dart`. The command exits nonzero because of that warning; the unrelated file was left unchanged.
-- `flutter build windows --release`: successful.
+- `flutter build windows --release --build-name=1.0.1 --build-number=2`: successful.
 - Packaged executable: launched and responding on Windows.
+- Six terminal regression tests and a real Windows ConPTY test: passed (letters, numeric prompts, backspace, focus, and output decoding).
 - All 140 packaged files: verified against the release ZIP.
 
 ## Project structure
