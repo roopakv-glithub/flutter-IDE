@@ -197,7 +197,7 @@ class _FileTreeState extends State<FileTree> {
 
     switch (ext) {
       case '.dart':
-        icon = FontAwesomeIcons.dartLang;
+        icon = FontAwesomeIcons.dartLang.data;
         color = const Color(0xFF42A5F5); // Flutter Blue
         break;
       case '.html':

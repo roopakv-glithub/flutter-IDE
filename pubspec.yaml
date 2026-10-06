@@ -43,11 +43,10 @@ dependencies:
   json_rpc_2: ^4.0.0
   xterm: ^4.0.0
   flutter_pty: ^0.4.0
-  pub_api_client: ^2.5.0
   http: ^1.2.0
   flutter_svg: ^2.2.3
   meta: ^1.17.0
-  font_awesome_flutter: ^10.12.0
+  font_awesome_flutter: 11.0.0
 
 
 dev_dependencies:

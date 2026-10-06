@@ -1,217 +1,118 @@
 # Flutter IDE
 
-A lightweight, cross-platform code editor built with Flutter. Features a VS Code-inspired interface with Monaco Editor integration, file tree navigation, multi-tab editing, integrated terminal, and pub.dev package search.
+A lightweight code editor built with Flutter, with a VS Code-inspired interface, Monaco code editing, file navigation, editor tabs, and an integrated terminal.
+
+## Download for Windows
+
+[Download Flutter IDE 1.0.0 for Windows x64](https://github.com/roopakv-glithub/flutter-IDE/releases/download/v1.0.0-windows/Flutter-IDE-1.0.0-windows-x64.zip)
+
+[Release notes and SHA-256 checksum](https://github.com/roopakv-glithub/flutter-IDE/releases/tag/v1.0.0-windows)
+
+1. Download the ZIP and choose **Extract All**.
+2. Open the extracted `Flutter-IDE-1.0.0-windows-x64` folder.
+3. Double-click `flutter_ide.exe`.
+
+Keep all DLL files and the `data` folder beside the executable. Do not copy only the EXE or run it from inside the ZIP. You can share the complete ZIP with other Windows users.
+
+### Requirements
+
+- Windows 10 or Windows 11 on an Intel/AMD 64-bit (x64) computer.
+- [Microsoft Edge WebView2 Evergreen Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) for the code editor. Install it if it is not already present.
+- Flutter and Visual Studio are **not required to launch the packaged IDE**. Visual C++ runtime DLLs are included.
+- To build or run Flutter projects with the Run button or terminal, install Flutter, add its `bin` directory to `PATH`, and install the toolchain for the target platform. Windows Flutter projects require the Visual Studio C++ desktop build tools.
+
+This is an unsigned portable application, not an installer or Microsoft Store package. The packaged release was launched and verified on Windows 10 x64; other computers have not been individually tested.
 
 ## Features
 
-### Editor
-- **Monaco Editor** - Powered by `flutter_monaco` for a rich code editing experience with syntax highlighting
-- **Multi-Tab Editing** - Open and switch between multiple files with a tabbed interface
-- **Auto-Save** - Automatically saves changes every 2 seconds
-- **File Watching** - Detects external file changes and reloads content automatically
-- **Quick File Search** - Press `Cmd+P` to quickly search and open files
-- **Syntax Highlighting** - Supports multiple languages:
-  - Dart, JavaScript, TypeScript, HTML, CSS, JSON, YAML, Markdown, SQL, XML
+- **Explorer:** folder tree navigation, file creation, folder creation, rename, and delete.
+- **Flutter project view:** organized navigation for `lib`, tests, platform folders, and other project files.
+- **Monaco code editor:** syntax highlighting, automatic saving, and file-change monitoring.
+- **Editor tabs:** open and switch between multiple files.
+- **Terminal:** integrated PTY terminal with a resizable panel.
+- **Run button:** runs `flutter run` for the opened project.
+- **Layout:** dark theme, resizable sidebar, breadcrumbs, and status bar.
 
-### Sidebars
-- **File Explorer** - VS Code-style sidebar with collapsible folder tree navigation
-- **Flutter Project View** - Organized view showing lib, test, platforms, and other folders
-- **Pub.dev Package Search** - Search and browse pub.dev packages with:
-  - Popular packages display
-  - Package details and metadata
-  - One-click "Add to Application" to run `flutter pub add`
-  - Open package pages in embedded WebView tabs
+The **Source Control/Git sidebar** and **Pub.dev Packages sidebar**, including their service/API integrations, have been removed. Explorer, Terminal, Run, code editing, tabs, file operations, and Flutter project structure remain intact. Git and Flutter package commands can still be entered manually in the terminal when those tools are installed.
 
-### Terminal
-- **Integrated Terminal** - Full PTY-based terminal with xterm.js
-- **Run Commands** - Execute `flutter run`, `flutter pub get`, and other commands
-- **Resizable Panel** - Drag to resize the terminal height
-- **Global Command API** - Run terminal commands from anywhere using `runTerminalCommand()`
+## Build and run from source
 
-### WebView Tabs
-- **Embedded Browser** - Open web pages (pub.dev, GitHub, docs) in editor tabs
-- **Link Interception** - Links clicked in WebViews open in new tabs
+The Flutter project is at the repository root; there is no separate demo directory.
 
-### UI/UX
-- **Resizable Sidebar** - Drag to adjust sidebar width (150px - 500px)
-- **Resizable Terminal** - Drag to adjust terminal height (100px - 500px)
-- **Dark Theme** - Modern VS Code-inspired dark UI
-- **Cross-Platform** - Runs on macOS, Windows, Linux, iOS, and Android
-
-## Screenshots
-
-### Main IDE Interface
-![Main IDE interface showing file explorer, code editor with main.dart open, and integrated terminal](assets/screenshots/main_interface.png)
-
-### Pub.dev Package Search
-![Pub.dev package search sidebar showing popular Flutter packages](assets/screenshots/pubdev_search.png)
-
-### Package Details View
-![Package details view for flutter_svg with installation options and metadata](assets/screenshots/package_details.png)
-
-### Package Documentation
-![Embedded pub.dev documentation view for flutter_svg package](assets/screenshots/package_documentation.png)
-
-
-The editor features:
-- Activity bar (left) for switching between Explorer, Flutter View, and Pub.dev
-- Resizable file explorer sidebar with folder/file tree
-- Editor tabs with file icons and WebView tabs
-- Breadcrumb navigation
-- Integrated terminal panel
-- Status bar showing language, encoding, and indentation
-
-## Getting Started
-
-### Installation
-
-1. Clone the repository:
-   ```bash
-   git clone <repository-url>
-   cd flutter_ide
-   ```
-
-2. Navigate to the demo project:
-   ```bash
-   cd flutter_ide_demo
-   ```
-
-3. Install dependencies:
-   ```bash
-   flutter pub get
-   ```
-
-4. Run the application:
-   ```bash
-   # For desktop (recommended)
-   flutter run -d macos  # or windows, linux
-
-   # For mobile
-   flutter run -d <device-id>
-   ```
-
-## Project Structure
-
-```
-flutter_ide_demo/
-├── lib/
-│   ├── main.dart                 # App entry point
-│   ├── editor_screen.dart        # Main editor UI with Monaco integration
-│   ├── file_tree.dart            # File explorer tree widget
-│   ├── flutter_sidebar.dart      # Flutter project structure sidebar
-│   ├── pubdev_sidebar.dart       # Pub.dev package search sidebar
-│   ├── output_panel.dart         # Integrated terminal panel
-│   ├── models/
-│   │   └── file_system_entity.dart   # File/Directory node models
-│   └── services/
-│       ├── file_service.dart         # Platform-aware service factory
-│       ├── file_service_interface.dart   # Abstract file service
-│       ├── file_service_io.dart      # Native platform implementation
-│       └── file_service_web.dart     # Web platform implementation
-├── pubspec.yaml
-└── test/
+```powershell
+git clone https://github.com/roopakv-glithub/flutter-IDE.git
+cd flutter-IDE
+flutter pub get
+flutter run -d windows
 ```
 
-## Architecture
+The Windows build was verified with Flutter 3.47.6, Dart 3.13.5, Visual Studio Build Tools 2019, and Windows SDK 10.0.19041.0. Enable Windows Developer Mode so Flutter can create plugin symlinks.
 
-### File System Abstraction
+If the WebView plugin cannot download its native packages because your NuGet configuration only contains a local cache, enable the official `https://api.nuget.org/v3/index.json` package source.
 
-The app uses a platform-aware file service pattern:
+### Build a Windows release
 
-- `FileService` (interface) - Defines operations: `pickDirectory`, `readFile`, `createFile`, `createDirectory`, `saveFile`, `deleteFile`, `deleteDirectory`, `rename`
-- `FileServiceIO` - Implementation for native platforms (macOS, Windows, Linux, iOS, Android)
-- `FileServiceWeb` - Implementation for web browsers using File System Access API
+```powershell
+flutter pub get
+flutter analyze
+flutter build windows --release
+```
 
-### Global Terminal API
+The executable and its supporting files are generated in:
 
-Run terminal commands from anywhere in the app:
+```text
+build/windows/x64/runner/Release/
+```
+
+For distribution, bundle the executable, every required DLL, the complete `data` directory, and the Visual C++ runtime libraries. Follow [Flutter's Windows packaging documentation](https://docs.flutter.dev/platform-integration/windows/building). Sharing the EXE alone is not sufficient.
+
+### Validation of this release
+
+- `flutter pub get`: successful.
+- `flutter analyze`: zero errors and one existing warning for an unused `package:flutter/foundation.dart` import in `lib/services/file_service_io.dart`. The command exits nonzero because of that warning; the unrelated file was left unchanged.
+- `flutter build windows --release`: successful.
+- Packaged executable: launched and responding on Windows.
+- All 140 packaged files: verified against the release ZIP.
+
+## Project structure
+
+```text
+lib/
+  main.dart
+  editor_screen.dart
+  file_tree.dart
+  flutter_sidebar.dart
+  output_panel.dart
+  models/
+  services/
+  widgets/editor/
+windows/
+  CMakeLists.txt
+  runner/
+    winrt_compat.h
+pubspec.yaml
+```
+
+The Windows compatibility header works around a missing forward declaration in Windows SDK 10.0.19041.0. It is applied only to that SDK version. The Font Awesome dependency and icon references are compatible with the Flutter version used for this release.
+
+## Global terminal API
 
 ```dart
 import 'editor_screen.dart';
 
-// Execute any command
 runTerminalCommand('flutter run');
 runTerminalCommand('flutter pub get');
 runTerminalCommand('dart analyze');
 ```
 
-### Data Models
-
-- `FileNode` - Abstract base class for file system entities
-- `FileNodeDirectory` - Represents a folder with children
-- `FileNodeFile` - Represents a file with optional cached content
-- `WebTab` - Represents a WebView tab with title and URL
-
-## Dependencies
-
-| Package | Version | Purpose |
-|---------|---------|---------|
-| `flutter_monaco` | ^1.1.1 | Monaco Editor integration |
-| `file_picker` | ^10.3.7 | Native file/folder selection |
-| `path` | ^1.9.1 | Path manipulation utilities |
-| `path_provider` | ^2.1.5 | Platform-specific directories |
-| `webview_flutter` | ^4.10.0 | WebView for embedded browser |
-| `xterm` | ^4.0.0 | Terminal emulator UI |
-| `flutter_pty` | ^0.4.0 | PTY for terminal functionality |
-| `pub_api_client` | ^2.5.0 | Pub.dev API client |
-| `http` | ^1.2.0 | HTTP client |
-
-## Usage
-
-1. **Open a Folder** - Click "Open Folder" on the welcome screen or use the folder icon
-2. **Navigate Files** - Click folders to expand/collapse, click files to open in editor
-3. **Quick Open** - Press `Cmd+P` to search for files by name
-4. **Edit Code** - Changes are auto-saved every 2 seconds
-5. **Create Files/Folders** - Use the icons in the explorer header
-6. **Switch Views** - Use the activity bar to switch between Explorer, Flutter View, and Pub.dev
-7. **Search Packages** - Use the Pub.dev sidebar to search and add packages
-8. **Run App** - Click the green play button to run `flutter run`
-9. **Use Terminal** - Toggle terminal visibility and run commands
-
-## Keyboard Shortcuts
-
-| Shortcut | Action |
-|----------|--------|
-| Cmd/Ctrl + P | Quick file search |
-| Cmd/Ctrl + O | Open folder |
-| Cmd/Ctrl + N | New file |
-| Cmd/Ctrl + Click | Go to definition (placeholder) |
-
-## Recent Changes
-
-- Added integrated terminal with PTY support
-- Added pub.dev package search sidebar
-- Added WebView tabs for opening URLs in editor
-- Added file watching for external changes
-- Added resizable sidebar and terminal panels
-- Added Quick File Search (Cmd+P)
-- Added Flutter project sidebar view
-- Added Run button to execute `flutter run`
-- Added global `runTerminalCommand()` API
-- Added protection against accidental empty file saves
-
-## Roadmap
-
-- [x] Terminal panel
-- [x] Pub.dev integration
-- [x] WebView tabs
-- [x] File watching
-- [x] Resizable panels
-- [x] Command+P and Command+O to search files and open folder.
-- [ ] LSP (Language Server Protocol) integration for Dart
-- [ ] Search across files
-- [x] Git integration
-- [ ] Extensions support
-- [ ] Custom themes
-- [ ] Split editor views
-
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome through pull requests. Keep changes focused and run analysis and the relevant platform build before submitting.
 
-<h3 align="left">Support:</h3>
-<p><a href="https://www.buymeacoffee.com/ankurg132" target="blank"> <img align="left" src="https://cdn.buymeacoffee.com/buttons/v2/default-yellow.png" height="50" width="210" alt="ankurg132" /></a></p><br><br>
+## Support
+
+[Support the original project author](https://www.buymeacoffee.com/ankurg132)
 
 ## License
 
-This project is open source and available under the MIT License.
+The original project README identifies the project as MIT-licensed. Third-party dependency notices are bundled in `data/flutter_assets/NOTICES.Z` in the Windows release.

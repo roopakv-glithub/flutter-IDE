@@ -57,6 +57,13 @@ add_subdirectory("runner")
 # them to the application.
 include(flutter/generated_plugins.cmake)
 
+# Work around a missing forward declaration in the Windows 10 19041 SDK.
+if(TARGET webview_windows_plugin AND
+   CMAKE_VS_WINDOWS_TARGET_PLATFORM_VERSION VERSION_EQUAL "10.0.19041.0")
+  target_compile_options(webview_windows_plugin PRIVATE
+    "/FI${CMAKE_CURRENT_SOURCE_DIR}/runner/winrt_compat.h")
+endif()
+
 
 # === Installation ===
 # Support files are copied into place next to the executable, so that it can

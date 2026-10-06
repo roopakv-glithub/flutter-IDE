@@ -3,7 +3,6 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_ide/widgets/git/git_sidebar.dart';
 import 'package:flutter_monaco/flutter_monaco.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:path/path.dart' as p;
@@ -14,7 +13,6 @@ import 'services/file_service.dart';
 import 'file_tree.dart';
 import 'flutter_sidebar.dart';
 import 'output_panel.dart';
-import 'pubdev_sidebar.dart';
 import 'widgets/editor/activity_bar.dart';
 import 'widgets/editor/editor_tabs.dart';
 import 'widgets/editor/status_bar.dart';
@@ -618,24 +616,6 @@ class _EditorScreenState extends State<EditorScreen> {
                       onPickDirectory: _pickDirectory,
                     ),
                   ),
-                if (_selectedActivityIndex == 2)
-                  SizedBox(
-                    width: _sidebarWidth + 50, // PubDev sidebar is wider
-                    child: PubDevSidebar(
-                      onOpenInBrowser: _openWebTab,
-                      onRunCommand: _runTerminalCommand,
-                    ),
-                  ),
-
-                if (_selectedActivityIndex == 3)
-                  SizedBox(
-                    width: _sidebarWidth + 50,
-                    child: GitSidebar(
-                      workingDirectory: _rootNode?.path,
-                      onRunCommand: _runTerminalCommand,
-                    ),
-                  ),
-
                 // Horizontal resize handle for sidebar
                 HorizontalResizeHandle(
                   onDrag: (delta) {
@@ -713,8 +693,6 @@ class _EditorScreenState extends State<EditorScreen> {
     final activities = [
       (Icons.insert_drive_file_outlined, 'Explorer'),
       (Icons.explore, 'Flutter explorer'),
-      (Icons.inventory_2_outlined, 'Pub.dev Packages'),
-      (FontAwesomeIcons.codeBranch, 'Source Control'),
     ];
 
     return Container(
@@ -1051,7 +1029,7 @@ class _EditorScreenState extends State<EditorScreen> {
 
     switch (ext) {
       case '.dart':
-        icon = FontAwesomeIcons.dartLang;
+        icon = FontAwesomeIcons.dartLang.data;
         color = const Color(0xFF42A5F5);
         break;
       case '.html':
