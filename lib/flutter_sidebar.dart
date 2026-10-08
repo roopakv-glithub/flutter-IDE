@@ -140,21 +140,15 @@ class _FlutterSidebarState extends State<FlutterSidebar> {
 
     return Column(
       children: [
-        _buildFolderHeader(
-          'test',
-          Icons.science_outlined,
-          isExpanded,
-          () {
-            setState(() {
-              if (isExpanded) {
-                _expandedFolders.remove('test');
-              } else {
-                _expandedFolders.add('test');
-              }
-            });
-          },
-          iconColor: const Color(0xFF66BB6A),
-        ),
+        _buildFolderHeader('test', Icons.science_outlined, isExpanded, () {
+          setState(() {
+            if (isExpanded) {
+              _expandedFolders.remove('test');
+            } else {
+              _expandedFolders.add('test');
+            }
+          });
+        }, iconColor: const Color(0xFF66BB6A)),
         if (isExpanded) _buildFolderContents(testDir, 1),
       ],
     );
@@ -172,7 +166,9 @@ class _FlutterSidebarState extends State<FlutterSidebar> {
     return Column(
       children: files.map((entity) {
         final name = p.basename(entity.path);
-        if (name.startsWith('.')) return const SizedBox.shrink();
+        if (name.startsWith('.') || (entity is Directory && name == 'build')) {
+          return const SizedBox.shrink();
+        }
 
         if (entity is File) {
           final isMain = name == 'main.dart';
@@ -228,7 +224,9 @@ class _FlutterSidebarState extends State<FlutterSidebar> {
     return Column(
       children: files.map((entity) {
         final name = p.basename(entity.path);
-        if (name.startsWith('.')) return const SizedBox.shrink();
+        if (name.startsWith('.') || (entity is Directory && name == 'build')) {
+          return const SizedBox.shrink();
+        }
 
         if (entity is File) {
           return _buildFileItem(
@@ -337,12 +335,16 @@ class _FlutterSidebarState extends State<FlutterSidebar> {
         if (entity is Directory) {
           final name = p.basename(entity.path);
           // Skip hidden folders and excluded folders
-          if (!name.startsWith('.') && !excludedFolders.contains(name)) {
+          if (!name.startsWith('.') &&
+              name != 'build' &&
+              !excludedFolders.contains(name)) {
             otherFolders.add(entity);
           }
         }
       }
-      otherFolders.sort((a, b) => p.basename(a.path).compareTo(p.basename(b.path)));
+      otherFolders.sort(
+        (a, b) => p.basename(a.path).compareTo(p.basename(b.path)),
+      );
     } catch (e) {
       return const SizedBox.shrink();
     }

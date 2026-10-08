@@ -12,6 +12,17 @@ void main() {
     expect(policy.canEdit(p.join(root, 'lib', 'main.dart')), isTrue);
     expect(policy.canEdit(p.join(root, 'lib', 'screens', 'home.dart')), isTrue);
     expect(policy.canEdit(p.join(root, 'pubspec.yaml')), isFalse);
+    expect(policy.canEdit(p.join(root, 'web', 'index.html')), isFalse);
+    expect(
+      policy.canRename(
+        p.join(root, 'lib', 'main.dart'),
+        'other.dart',
+        isDirectory: false,
+      ),
+      isFalse,
+    );
+    expect(policy.canCreateIn(p.join(root, 'lib', 'screens')), isTrue);
+    expect(policy.canCreateIn(p.join(root, 'web')), isFalse);
     expect(policy.canEdit(p.join(root, 'lib', '..', 'main.dart')), isFalse);
     expect(
       policy.canDelete(p.join(root, 'lib', 'main.dart'), isDirectory: false),

@@ -87,12 +87,14 @@ class WelcomeScreen extends StatelessWidget {
   final String? rootName;
   final VoidCallback onPickDirectory;
   final VoidCallback? onCreateNewFile;
+  final VoidCallback? onSetUpProject;
 
   const WelcomeScreen({
     super.key,
     this.rootName,
     required this.onPickDirectory,
     this.onCreateNewFile,
+    this.onSetUpProject,
   });
 
   @override
@@ -138,6 +140,12 @@ class WelcomeScreen extends StatelessWidget {
                     onPressed: onCreateNewFile!,
                   ),
               ],
+            ),
+            const SizedBox(height: 16),
+            ElevatedButton.icon(
+              onPressed: onSetUpProject,
+              icon: const Icon(Icons.build_outlined, size: 18),
+              label: const Text('Set Up Project'),
             ),
             const SizedBox(height: 48),
             if (rootName != null) ...[

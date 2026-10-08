@@ -7,6 +7,10 @@ import '../models/file_system_entity.dart';
 import 'file_service_interface.dart';
 
 class FileServiceImpl implements FileService {
+  @override
+  Future<FileNodeDirectory> loadDirectory(String path) async =>
+      throw UnsupportedError('Project setup requires the desktop IDE.');
+
   // Cache content since we can't re-read paths on web easily without keeping the file object
   // In a real app we might store the PlatformFile bytes in the FileNodeFile or a separate cache
   final Map<String, Uint8List> _contentCache = {};

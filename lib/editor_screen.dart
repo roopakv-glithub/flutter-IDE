@@ -14,6 +14,8 @@ import 'config/event_config.dart';
 import 'policy/project_policy.dart';
 import 'services/file_service.dart';
 import 'services/pubspec_edit.dart';
+import 'services/project_setup_service.dart';
+import 'widgets/editor/project_setup_dialog.dart';
 import 'file_tree.dart';
 import 'flutter_sidebar.dart';
 import 'output_panel.dart';
@@ -45,6 +47,7 @@ class EditorScreen extends StatefulWidget {
 
 class _EditorScreenState extends State<EditorScreen> {
   FileNodeDirectory? _rootNode;
+  bool _settingUpProject = false;
   MonacoController? _editorController;
   final List<FileNodeFile> _openFiles = [];
   FileNodeFile? _activeFile;
@@ -406,6 +409,57 @@ class _EditorScreenState extends State<EditorScreen> {
         _editorController = null;
         _rootNode = root;
       });
+    }
+  }
+
+  Future<void> _setUpProject() async {
+    if (_settingUpProject) return;
+    setState(() => _settingUpProject = true);
+    try {
+      final directory =
+          _rootNode?.path ??
+          await FilePicker.platform.getDirectoryPath(
+            dialogTitle: 'Choose a folder for the Flutter web project',
+          );
+      if (directory == null || !mounted) return;
+      await _flushActiveFile();
+      if (!mounted) return;
+      final success = await showDialog<bool>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => ProjectSetupDialog(
+          directory: directory,
+          service: ProjectSetupService(),
+        ),
+      );
+      if (success != true || !mounted) return;
+      final root = await fileService.loadDirectory(directory);
+      final mainPath = p.join(directory, 'lib', 'main.dart');
+      if (!await File(mainPath).exists()) {
+        _toast(
+          'Setup finished but lib/main.dart was not found. Check the project folder.',
+        );
+        return;
+      }
+      if (!mounted) return;
+      for (final path in _fileWatchers.keys.toList()) {
+        _stopWatchingFile(path);
+      }
+      setState(() {
+        _rootNode = root;
+        _openFiles.clear();
+        _activeFile = null;
+        _activeWebTab = null;
+        _editorController = null;
+        _selectedDirectory = null;
+        _selectedActivityIndex = 0;
+      });
+      await _openFile(FileNodeFile('main.dart', mainPath));
+      _toast('Web project ready. Run opens Chrome.');
+    } catch (error) {
+      _toast('Could not set up the project: $error');
+    } finally {
+      if (mounted) setState(() => _settingUpProject = false);
     }
   }
 
@@ -946,6 +1000,9 @@ class _EditorScreenState extends State<EditorScreen> {
                             : _activeFile == null
                             ? WelcomeScreen(
                                 rootName: _rootNode?.name,
+                                onSetUpProject: _settingUpProject
+                                    ? null
+                                    : _setUpProject,
                                 onPickDirectory: _pickDirectory,
                                 onCreateNewFile: _rootNode != null
                                     ? _createNewFile
@@ -1044,6 +1101,17 @@ class _EditorScreenState extends State<EditorScreen> {
       color: const Color(0xFF181818),
       child: Column(
         children: [
+          Padding(
+            padding: const EdgeInsets.all(8),
+            child: SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _settingUpProject ? null : _setUpProject,
+                icon: const Icon(Icons.build_outlined, size: 16),
+                label: const Text('Set Up Project'),
+              ),
+            ),
+          ),
           // Explorer Header
           if (_rootNode != null)
             Container(

@@ -27,6 +27,10 @@ class FileServiceImpl implements FileService {
     return _buildDirectoryNode(dir);
   }
 
+  @override
+  Future<FileNodeDirectory> loadDirectory(String path) async =>
+      _buildDirectoryNode(Directory(path));
+
   FileNodeDirectory _buildDirectoryNode(Directory dir) {
     List<FileNode> children = [];
     try {
@@ -44,7 +48,9 @@ class FileServiceImpl implements FileService {
 
       for (var entity in entities) {
         final name = p.basename(entity.path);
-        if (name.startsWith('.')) continue; // Skip hidden
+        if (name.startsWith('.') || (entity is Directory && name == 'build')) {
+          continue;
+        } // Skip hidden
 
         if (entity is Directory) {
           children.add(_buildDirectoryNode(entity));

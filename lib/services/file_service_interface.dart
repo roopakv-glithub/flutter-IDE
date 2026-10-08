@@ -2,6 +2,7 @@ import '../models/file_system_entity.dart';
 
 abstract class FileService {
   Future<FileNodeDirectory?> pickDirectory();
+  Future<FileNodeDirectory> loadDirectory(String path);
   Future<String?> readFile(FileNodeFile file);
   Future<FileNodeFile?> createFile(String parentPath, String name);
   Future<FileNodeDirectory?> createDirectory(String parentPath, String name);

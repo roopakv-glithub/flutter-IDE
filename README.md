@@ -4,9 +4,9 @@ A Windows code editor for Flutter Wars, with Monaco editing, an Explorer, a rest
 
 ## Download for Windows
 
-[Download Flutter Wars IDE 1.0.2 for Windows x64](https://github.com/roopakv-glithub/flutter-IDE/releases/download/v1.0.2-windows/Flutter-IDE-1.0.2-windows-x64.zip)
+[Download Flutter Wars IDE 1.0.3 for Windows x64](https://github.com/roopakv-glithub/flutter-IDE/releases/download/v1.0.3-windows/Flutter-IDE-1.0.3-windows-x64.zip)
 
-[Release notes and SHA-256 checksum](https://github.com/roopakv-glithub/flutter-IDE/releases/tag/v1.0.2-windows)
+[Release notes and SHA-256 checksum](https://github.com/roopakv-glithub/flutter-IDE/releases/tag/v1.0.3-windows)
 
 Extract the complete ZIP and open `flutter_ide.exe` in the extracted folder. Keep every DLL and the `data` folder alongside the executable.
 
@@ -19,7 +19,19 @@ Requirements:
 
 The release is an unsigned portable application. The Windows build and automated regression tests were checked locally. Interactive editor scrolling, touchpad behavior, and the full Run flow still need manual confirmation on the target computer.
 
-## Changes in 1.0.2
+## Set up a project
+
+Click **Set Up Project** on the welcome screen or in the Explorer. Choose a folder if none is open. The IDE runs `flutter create --platforms=web --project-name=flutter_wars_app .` there (using the existing project name when available). The progress dialog streams Flutter output and errors. Successful setup refreshes the Explorer and automatically opens `lib/main.dart`. Failed setup keeps the error output visible so you can fix the issue and retry. Flutter must be installed and on PATH.
+
+Only Dart files inside `lib/` are editable. Create subfolders and new Dart files there. `lib/main.dart` cannot be renamed or deleted. `pubspec.yaml` and web configuration remain read-only. `build/` and `.dart_tool/` are hidden from project navigation. Run always uses Chrome.
+
+## Changes in 1.0.3
+
+- Added the Set Up Project button, live setup progress/error output, tree refresh, and automatic opening of `lib/main.dart`.
+- Hide generated `build/` and `.dart_tool/` folders in both project views.
+- Retain the file protections, approved packages, and basic terminal commands from 1.0.2.
+
+## Changes included from 1.0.2
 
 - Merged the teammate's Flutter Wars event features while retaining Windows terminal keyboard, focus, and UTF-8 fixes.
 - Dart files inside `lib/`, including `main.dart`, are editable. Project configuration and other files have a read-only viewer. Opening `lib/` directly resolves the enclosing project folder.
@@ -63,7 +75,7 @@ cd flutter-IDE
 flutter pub get
 flutter analyze
 flutter test
-flutter build windows --release --build-name=1.0.2 --build-number=3
+flutter build windows --release --build-name=1.0.3 --build-number=4
 ```
 
 The application is generated in `build/windows/x64/runner/Release/`. Package that entire directory with the x64 Visual C++ redistributable runtime DLLs. The build uses the existing Windows SDK compatibility fix and Font Awesome 11 dependency.
@@ -74,12 +86,13 @@ Event settings and approved package constraints live in `lib/config/event_config
 
 Use a disposable Flutter project:
 
-1. Edit `lib/main.dart` and another Dart file, switch tabs, and verify saved content.
-2. Rename a file and a nested folder; verify disk names, tabs, and the Explorer.
-3. Delete a spare file and folder; verify tabs close and items stay deleted.
-4. Scroll a long code file and long terminal output with both wheel and touchpad.
-5. Run `flutter doctor`, `flutter analyze`, and `flutter run`; verify Run opens Chrome and hot reload works.
-6. Confirm project configuration stays read-only, approved packages can be added, and other terminal commands are blocked.
+1. Click Set Up Project in an empty folder; verify progress and automatic opening of `lib/main.dart`.
+2. Edit `lib/main.dart` and another Dart file, switch tabs, and verify saved content.
+3. Rename a file and a nested folder; verify disk names, tabs, and the Explorer.
+4. Delete a spare file and folder; verify tabs close and items stay deleted.
+5. Scroll a long code file and long terminal output with both wheel and touchpad.
+6. Run `flutter doctor`, `flutter analyze`, and `flutter run`; verify Run opens Chrome and hot reload works.
+7. Confirm project configuration stays read-only, approved packages can be added, and other terminal commands are blocked.
 
 ## Support and license
 
