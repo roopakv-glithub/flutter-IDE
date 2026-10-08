@@ -366,10 +366,10 @@ class _OutputPanelState extends State<OutputPanel> {
                   padding: const EdgeInsets.all(8),
                   focusNode: focusNode,
                   autofocus: true,
-                  textStyle: const TerminalStyle(
+                  textStyle: TerminalStyle(
                     fontSize: 14,
                     height: 1.3,
-                    fontFamily: 'Consolas',
+                    fontFamily: Platform.isWindows ? 'Consolas' : 'monospace',
                   ),
                 ),
               ),

@@ -65,7 +65,7 @@ void main() {
   }
 
   testWidgets(
-    'Windows letters, digits, numpad and Enter reach the running process once',
+    'letters, digits, numpad and Enter reach the running process once',
     (tester) async {
       await showPanel(tester, command: 'flutter run');
       await tester.sendKeyEvent(LogicalKeyboardKey.keyA, character: 'a');
@@ -76,7 +76,7 @@ void main() {
       await tester.sendKeyEvent(LogicalKeyboardKey.enter);
       expect(pty.writes.join(), 'a1231\r');
     },
-    skip: !Platform.isWindows,
+    skip: !Platform.isWindows && !Platform.isLinux,
   );
 
   testWidgets('Run refocuses an already visible terminal for process input', (
@@ -92,7 +92,7 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.digit2, character: '2');
     await tester.sendKeyEvent(LogicalKeyboardKey.enter);
     expect(pty.writes.join(), '2\r');
-  }, skip: !Platform.isWindows);
+  }, skip: !Platform.isWindows && !Platform.isLinux);
 
   testWidgets('first allowed command starts a hidden terminal', (tester) async {
     await showPanel(tester, visible: false);
@@ -139,7 +139,7 @@ void main() {
     expect(pty.writes, ['3']);
     await tester.pumpWidget(const SizedBox());
     expect(pty.killed, isTrue);
-  }, skip: !Platform.isWindows);
+  }, skip: !Platform.isWindows && !Platform.isLinux);
   testWidgets('blocks shell commands and unapproved package additions', (
     tester,
   ) async {

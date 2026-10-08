@@ -1,0 +1,61 @@
+name: Platform CI
+
+on:
+  push:
+    branches:
+      - Linux-support
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    name: Windows x64 build and tests
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.47.6
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter build windows --release
+      - name: Run tests with native terminal enabled
+        shell: pwsh
+        run: |
+          $env:FLUTTER_IDE_NATIVE_TERMINAL_TEST = "1"
+          $env:PATH = "$env:GITHUB_WORKSPACE\build\windows\x64\runner\Release;$env:PATH"
+          flutter test
+
+  linux:
+    name: Ubuntu 24.04 x64 build and tests
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Linux build and WebKitGTK dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            clang \
+            cmake \
+            libgtk-3-dev \
+            libwebkit2gtk-4.1-dev \
+            ninja-build \
+            pkg-config
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.47.6
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter build linux --release
+      - name: Run tests with native terminal enabled
+        run: |
+          echo "FLUTTER_IDE_NATIVE_TERMINAL_TEST=1" >> "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=$GITHUB_WORKSPACE/build/linux/x64/release/bundle/lib:$LD_LIBRARY_PATH" >> "$GITHUB_ENV"
+          flutter test

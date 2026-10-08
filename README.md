@@ -1,6 +1,6 @@
 # Flutter Wars IDE
 
-A Windows code editor for Flutter Wars, with Monaco editing, an Explorer, a restricted Flutter terminal, and Chrome running.
+A desktop code editor for Flutter Wars, with an Explorer, a restricted Flutter terminal, and Chrome-only project execution. Windows retains its Monaco editor; Linux uses a native Flutter code editor.
 
 ## Download for Windows
 
@@ -18,6 +18,40 @@ Requirements:
 - The Visual C++ runtime DLLs are included. Flutter and Visual Studio are not required just to open the packaged IDE.
 
 The release is an unsigned portable application. The Windows build and automated regression tests were checked locally. Interactive editor scrolling, touchpad behavior, and the full Run flow still need manual confirmation on the target computer.
+
+## Linux availability
+
+Ubuntu 24.04 LTS on x86_64 (amd64) is the only Linux distro and architecture targeted by the Linux build/test workflow. Other distributions and CPU architectures have not been tested and are not claimed as supported. The Linux editor uses a native Flutter code editor; the existing Windows Monaco editor remains unchanged.
+
+| Distro | CPU architecture | Validation status |
+| --- | --- | --- |
+| Ubuntu 24.04 LTS | x86_64 (amd64) | Dedicated GitHub Actions build and test; first branch run pending |
+
+The Linux release is published separately from Windows releases:
+
+- [Download Flutter Wars IDE 1.0.5 for Linux x64](https://github.com/roopakv-glithub/flutter-IDE/releases/download/v1.0.5-linux/Flutter-IDE-1.0.5-linux-x64.tar.gz)
+- [Linux release notes and SHA-256 checksum](https://github.com/roopakv-glithub/flutter-IDE/releases/tag/v1.0.5-linux)
+
+### Install on Ubuntu 24.04 LTS
+
+1. Download the Linux x64 `.tar.gz` and its `.sha256` file from the links above.
+2. Verify the download and extract the portable bundle:
+
+   ```bash
+   sha256sum -c Flutter-IDE-1.0.5-linux-x64.tar.gz.sha256
+   tar -xzf Flutter-IDE-1.0.5-linux-x64.tar.gz
+   cd bundle
+   ./flutter_ide
+   ```
+
+3. If required libraries are missing, install the WebKitGTK 4.1 and GTK 3 runtime libraries:
+
+   ```bash
+   sudo apt update
+   sudo apt install libwebkit2gtk-4.1-0 libgtk-3-0t64
+   ```
+
+4. Install Google Chrome Stable and add Flutter to `PATH` to run or analyze participant projects. **Run always targets Chrome**; alternative Flutter targets remain blocked.
 
 ## Set up a project
 
@@ -81,6 +115,19 @@ flutter build windows --release --build-name=1.0.4 --build-number=5
 ```
 
 The application is generated in `build/windows/x64/runner/Release/`. Package that entire directory with the x64 Visual C++ redistributable runtime DLLs. The build uses the existing Windows SDK compatibility fix and Font Awesome 11 dependency.
+
+On Ubuntu 24.04, install the native build dependencies and build Linux x64 with:
+
+```bash
+sudo apt update
+sudo apt install build-essential clang cmake libgtk-3-dev libwebkit2gtk-4.1-dev ninja-build pkg-config
+flutter pub get
+flutter analyze
+flutter test
+flutter build linux --release --build-name=1.0.5 --build-number=6
+```
+
+The Linux bundle is generated in `build/linux/x64/release/bundle/`. The separate Linux release workflow packages this directory and publishes its SHA-256 checksum without modifying Windows releases.
 
 Event settings and approved package constraints live in `lib/config/event_config.dart`. File operation rules live in `lib/policy/project_policy.dart`.
 

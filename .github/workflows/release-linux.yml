@@ -1,0 +1,72 @@
+name: Linux release
+
+on:
+  push:
+    tags:
+      - 'v1.0.5-linux'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build and publish Ubuntu 24.04 x64 artifact
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Verify release commit belongs to Linux-support
+        run: |
+          git fetch origin refs/heads/Linux-support:refs/remotes/origin/Linux-support
+          git fetch origin refs/heads/main:refs/remotes/origin/main
+          release_sha="$(git rev-parse HEAD)"
+          git merge-base --is-ancestor "$release_sha" refs/remotes/origin/Linux-support
+          if git merge-base --is-ancestor "$release_sha" refs/remotes/origin/main; then
+            echo "Refusing to publish a release built from a commit on main."
+            exit 1
+          fi
+      - name: Install Linux build and WebKitGTK dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            clang \
+            cmake \
+            libgtk-3-dev \
+            libwebkit2gtk-4.1-dev \
+            ninja-build \
+            pkg-config
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.47.6
+          cache: true
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter build linux --release --build-name=1.0.5 --build-number=6
+      - name: Run tests
+        run: |
+          echo "FLUTTER_IDE_NATIVE_TERMINAL_TEST=1" >> "$GITHUB_ENV"
+          echo "LD_LIBRARY_PATH=$GITHUB_WORKSPACE/build/linux/x64/release/bundle/lib:$LD_LIBRARY_PATH" >> "$GITHUB_ENV"
+          flutter test
+      - name: Package Linux release and checksum
+        run: |
+          mkdir -p build/distributions
+          archive="Flutter-IDE-1.0.5-linux-x64.tar.gz"
+          tar -czf "build/distributions/$archive" -C build/linux/x64/release bundle
+          cd build/distributions
+          sha256sum "$archive" > "$archive.sha256"
+      - name: Publish Linux-only release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Flutter Wars IDE 1.0.5 for Linux x64
+          body: |
+            Linux release built from the Linux-support branch and validated on Ubuntu 24.04 LTS x86_64.
+
+            This release does not replace or modify any Windows release. See the repository README for Linux installation requirements.
+          files: |
+            build/distributions/Flutter-IDE-1.0.5-linux-x64.tar.gz
+            build/distributions/Flutter-IDE-1.0.5-linux-x64.tar.gz.sha256
+          fail_on_unmatched_files: true

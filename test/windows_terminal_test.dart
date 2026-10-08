@@ -5,10 +5,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:xterm/xterm.dart';
 
 // Opt in with FLUTTER_IDE_NATIVE_TERMINAL_TEST=1. Add the built directory
-// containing flutter_pty.dll and the Flutter SDK bin directory to PATH.
+// containing flutter_pty and the Flutter SDK bin directory to PATH.
 void main() {
   testWidgets(
-    'Windows restricted terminal runs Flutter diagnostics without a project',
+    'restricted terminal runs Flutter diagnostics without a project',
     (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
@@ -41,7 +41,7 @@ void main() {
       await tester.pumpWidget(const SizedBox());
     },
     skip:
-        !Platform.isWindows ||
+        (!Platform.isWindows && !Platform.isLinux) ||
         Platform.environment['FLUTTER_IDE_NATIVE_TERMINAL_TEST'] != '1',
   );
 }

@@ -4,9 +4,13 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter_code_editor/flutter_code_editor.dart';
 import 'package:flutter_monaco/flutter_monaco.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:highlight/languages/dart.dart' as highlight_dart;
 import 'package:path/path.dart' as p;
+import 'package:webview_platform_interface/webview_platform_interface.dart'
+    as linux_webview;
 import 'package:webview_flutter/webview_flutter.dart';
 import 'models/file_system_entity.dart';
 import 'models/web_tab.dart';
@@ -26,6 +30,7 @@ import 'widgets/editor/status_bar.dart';
 import 'widgets/editor/welcome_screen.dart';
 import 'widgets/editor/quick_open_dialog.dart';
 import 'widgets/editor/resize_handles.dart';
+import 'widgets/editor/linux_code_editor.dart';
 
 void _noop() {}
 
@@ -49,6 +54,10 @@ class _EditorScreenState extends State<EditorScreen> {
   FileNodeDirectory? _rootNode;
   bool _settingUpProject = false;
   MonacoController? _editorController;
+  final CodeController _linuxEditorController = CodeController(
+    text: '// Open a file to start editing\n',
+    language: highlight_dart.dart,
+  );
   final List<FileNodeFile> _openFiles = [];
   FileNodeFile? _activeFile;
   String _currentCode = '// Open a file to start editing\n';
@@ -58,6 +67,8 @@ class _EditorScreenState extends State<EditorScreen> {
   final List<WebTab> _webTabs = [];
   WebTab? _activeWebTab;
   final Map<String, WebViewController> _webViewControllers = {};
+  final Map<String, Future<linux_webview.PlatformWebViewController>>
+  _linuxWebViewControllers = {};
 
   // Output panel state
   bool _isOutputVisible = false;
@@ -85,6 +96,7 @@ class _EditorScreenState extends State<EditorScreen> {
     HardwareKeyboard.instance.addHandler(_handleGlobalKeyEvent);
     // Register global terminal command handler
     _globalRunTerminalCommand = _runTypedCommand;
+    if (Platform.isLinux) _startAutoSave();
   }
 
   // ---------------------------------------------------------------------
@@ -116,10 +128,16 @@ class _EditorScreenState extends State<EditorScreen> {
   Future<void> _flushActiveFile() async {
     final file = _activeFile;
     final controller = _editorController;
-    if (file == null || controller == null || _loadingFile) return;
+    if (file == null ||
+        (controller == null && !Platform.isLinux) ||
+        _loadingFile) {
+      return;
+    }
     if (!_canEdit(file.path)) return;
     try {
-      final content = await controller.getValue();
+      final content = Platform.isLinux
+          ? _linuxEditorController.text
+          : await controller!.getValue();
       if (content == _currentCode) return;
       // Don't save if content became empty but wasn't before.
       if (content.trim().isEmpty && _currentCode.trim().isNotEmpty) return;
@@ -279,6 +297,42 @@ class _EditorScreenState extends State<EditorScreen> {
     return _webViewControllers[url]!;
   }
 
+  Future<linux_webview.PlatformWebViewController>
+  _getOrCreateLinuxWebViewController(String url) {
+    final existing = _linuxWebViewControllers[url];
+    if (existing != null) return existing;
+
+    final controllerFuture = () async {
+      var hasCompletedInitialLoad = false;
+      final controller = linux_webview.PlatformWebViewController(
+        const linux_webview.PlatformWebViewControllerCreationParams(),
+      );
+      final navigationDelegate = linux_webview.PlatformNavigationDelegate(
+        const linux_webview.PlatformNavigationDelegateCreationParams(),
+      );
+      await navigationDelegate.setOnPageFinished(
+        (_) => hasCompletedInitialLoad = true,
+      );
+      await navigationDelegate.setOnNavigationRequest((request) {
+        if (!hasCompletedInitialLoad) {
+          return linux_webview.NavigationDecision.navigate;
+        }
+        _openWebTab(_getTitleFromUrl(request.url), request.url);
+        return linux_webview.NavigationDecision.prevent;
+      });
+      await controller.setJavaScriptMode(
+        linux_webview.JavaScriptMode.unrestricted,
+      );
+      await controller.setPlatformNavigationDelegate(navigationDelegate);
+      await controller.loadRequest(
+        linux_webview.LoadRequestParams(uri: Uri.parse(url)),
+      );
+      return controller;
+    }();
+    _linuxWebViewControllers[url] = controllerFuture;
+    return controllerFuture;
+  }
+
   String _getTitleFromUrl(String url) {
     try {
       final uri = Uri.parse(url);
@@ -311,6 +365,7 @@ class _EditorScreenState extends State<EditorScreen> {
       subscription.cancel();
     }
     _fileWatchers.clear();
+    _linuxEditorController.dispose();
     super.dispose();
   }
 
@@ -351,7 +406,7 @@ class _EditorScreenState extends State<EditorScreen> {
           setState(() {
             _currentCode = content;
           });
-          _editorController?.setValue(content);
+          _setEditorValue(content);
 
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -553,6 +608,7 @@ class _EditorScreenState extends State<EditorScreen> {
     setState(() {
       _webTabs.remove(tab);
       _webViewControllers.remove(tab.url);
+      _linuxWebViewControllers.remove(tab.url);
       if (_activeWebTab == tab) {
         if (_webTabs.isNotEmpty) {
           _activeWebTab = _webTabs.last;
@@ -864,8 +920,10 @@ class _EditorScreenState extends State<EditorScreen> {
 
       if (editable) {
         try {
-          _editorController?.setValue(_currentCode);
-          _editorController?.setLanguage(_getLanguage(file.path));
+          _setEditorValue(_currentCode);
+          if (!Platform.isLinux) {
+            _editorController?.setLanguage(_getLanguage(file.path));
+          }
         } catch (e) {
           // Editor not ready yet: it will start from initialValue instead.
         }
@@ -900,7 +958,7 @@ class _EditorScreenState extends State<EditorScreen> {
           _activeFile = null;
           _currentCode = '// Open a file to start editing\n';
           try {
-            _editorController?.setValue(_currentCode);
+            _setEditorValue(_currentCode);
           } catch (e) {
             // Editor is not on screen
           }
@@ -1339,28 +1397,41 @@ class _EditorScreenState extends State<EditorScreen> {
 
   Widget _buildEditor() {
     return Listener(
-      child: MonacoEditor(
-        key: ObjectKey(_rootNode),
-        loadingBuilder: (context) => Container(
-          color: const Color(0xFF1E1E1E),
-          child: const Center(
-            child: CircularProgressIndicator(color: Color(0xFF42A5F5)),
-          ),
-        ),
-        initialValue: _currentCode,
-        options: const EditorOptions(
-          language: MonacoLanguage.dart,
-          theme: MonacoTheme.vsDark,
-          automaticLayout: true,
-          readOnly: false,
-          smoothScrolling: true,
-        ),
-        onReady: (controller) {
-          _editorController = controller;
-          _startAutoSave();
-        },
-      ),
+      child: Platform.isLinux
+          ? LinuxCodeEditor(
+              key: ObjectKey(_rootNode),
+              controller: _linuxEditorController,
+            )
+          : MonacoEditor(
+              key: ObjectKey(_rootNode),
+              loadingBuilder: (context) => Container(
+                color: const Color(0xFF1E1E1E),
+                child: const Center(
+                  child: CircularProgressIndicator(color: Color(0xFF42A5F5)),
+                ),
+              ),
+              initialValue: _currentCode,
+              options: const EditorOptions(
+                language: MonacoLanguage.dart,
+                theme: MonacoTheme.vsDark,
+                automaticLayout: true,
+                readOnly: false,
+                smoothScrolling: true,
+              ),
+              onReady: (controller) {
+                _editorController = controller;
+                _startAutoSave();
+              },
+            ),
     );
+  }
+
+  void _setEditorValue(String value) {
+    if (Platform.isLinux) {
+      _linuxEditorController.text = value;
+    } else {
+      _editorController?.setValue(value);
+    }
   }
 
   Widget _buildReadOnlyViewer() {
@@ -1447,9 +1518,41 @@ class _EditorScreenState extends State<EditorScreen> {
           ),
           // WebView content
           Expanded(
-            child: WebViewWidget(
-              controller: _getOrCreateWebViewController(_activeWebTab!.url),
-            ),
+            child: Platform.isLinux
+                ? FutureBuilder<linux_webview.PlatformWebViewController>(
+                    future: _getOrCreateLinuxWebViewController(
+                      _activeWebTab!.url,
+                    ),
+                    builder: (context, snapshot) {
+                      if (snapshot.hasError) {
+                        return Center(
+                          child: Text(
+                            'Could not load page: ${snapshot.error}',
+                            style: const TextStyle(color: Colors.white70),
+                          ),
+                        );
+                      }
+                      final controller = snapshot.data;
+                      if (controller == null) {
+                        return const Center(
+                          child: CircularProgressIndicator(
+                            color: Color(0xFF42A5F5),
+                          ),
+                        );
+                      }
+                      return linux_webview.PlatformWebViewWidget(
+                        linux_webview.PlatformWebViewWidgetCreationParams(
+                          key: ValueKey(_activeWebTab!.url),
+                          controller: controller,
+                        ),
+                      ).build(context);
+                    },
+                  )
+                : WebViewWidget(
+                    controller: _getOrCreateWebViewController(
+                      _activeWebTab!.url,
+                    ),
+                  ),
           ),
         ],
       ),
