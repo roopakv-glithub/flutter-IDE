@@ -4,9 +4,9 @@ A Windows code editor for Flutter Wars, with Monaco editing, an Explorer, a rest
 
 ## Download for Windows
 
-[Download Flutter Wars IDE 1.0.3 for Windows x64](https://github.com/roopakv-glithub/flutter-IDE/releases/download/v1.0.3-windows/Flutter-IDE-1.0.3-windows-x64.zip)
+[Download Flutter Wars IDE 1.0.4 for Windows x64](https://github.com/roopakv-glithub/flutter-IDE/releases/download/v1.0.4-windows/Flutter-IDE-1.0.4-windows-x64.zip)
 
-[Release notes and SHA-256 checksum](https://github.com/roopakv-glithub/flutter-IDE/releases/tag/v1.0.3-windows)
+[Release notes and SHA-256 checksum](https://github.com/roopakv-glithub/flutter-IDE/releases/tag/v1.0.4-windows)
 
 Extract the complete ZIP and open `flutter_ide.exe` in the extracted folder. Keep every DLL and the `data` folder alongside the executable.
 
@@ -25,7 +25,9 @@ Click **Set Up Project** on the welcome screen or in the Explorer. Choose a fold
 
 Only Dart files inside `lib/` are editable. Create subfolders and new Dart files there. `lib/main.dart` cannot be renamed or deleted. `pubspec.yaml` and web configuration remain read-only. `build/` and `.dart_tool/` are hidden from project navigation. Run always uses Chrome.
 
-## Changes in 1.0.3
+## Changes in 1.0.4
+
+- Recreate the editor after setup refreshes the project, including when a file was already open.
 
 - Added the Set Up Project button, live setup progress/error output, tree refresh, and automatic opening of `lib/main.dart`.
 - Hide generated `build/` and `.dart_tool/` folders in both project views.
@@ -75,7 +77,7 @@ cd flutter-IDE
 flutter pub get
 flutter analyze
 flutter test
-flutter build windows --release --build-name=1.0.3 --build-number=4
+flutter build windows --release --build-name=1.0.4 --build-number=5
 ```
 
 The application is generated in `build/windows/x64/runner/Release/`. Package that entire directory with the x64 Visual C++ redistributable runtime DLLs. The build uses the existing Windows SDK compatibility fix and Font Awesome 11 dependency.

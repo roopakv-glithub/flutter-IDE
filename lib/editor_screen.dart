@@ -1340,6 +1340,7 @@ class _EditorScreenState extends State<EditorScreen> {
   Widget _buildEditor() {
     return Listener(
       child: MonacoEditor(
+        key: ObjectKey(_rootNode),
         loadingBuilder: (context) => Container(
           color: const Color(0xFF1E1E1E),
           child: const Center(
