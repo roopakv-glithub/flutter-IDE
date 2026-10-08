@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'package:flutter/foundation.dart';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
@@ -13,7 +12,18 @@ class FileServiceImpl implements FileService {
         .getDirectoryPath();
     if (selectedDirectory == null) return null;
 
-    final dir = Directory(selectedDirectory);
+    var dir = Directory(selectedDirectory);
+    // Accept opening lib/ directly and recover its enclosing Flutter project.
+    var candidate = dir;
+    while (true) {
+      if (await File(p.join(candidate.path, 'pubspec.yaml')).exists()) {
+        dir = candidate;
+        break;
+      }
+      final parent = candidate.parent;
+      if (parent.path == candidate.path) break;
+      candidate = parent;
+    }
     return _buildDirectoryNode(dir);
   }
 
@@ -130,6 +140,19 @@ class FileServiceImpl implements FileService {
   @override
   Future<bool> rename(String oldPath, String newName) async {
     try {
+      if (newName.isEmpty ||
+          newName == '.' ||
+          newName == '..' ||
+          newName.endsWith('.') ||
+          newName.endsWith(' ') ||
+          RegExp(r'[<>:"/\\|?*]').hasMatch(newName)) {
+        return false;
+      }
+      final destination = p.join(p.dirname(oldPath), newName);
+      if (await FileSystemEntity.type(destination) !=
+          FileSystemEntityType.notFound) {
+        return false;
+      }
       final entity = FileSystemEntity.typeSync(oldPath);
 
       if (entity == FileSystemEntityType.file) {

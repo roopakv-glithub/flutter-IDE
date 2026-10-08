@@ -1,127 +1,88 @@
-# Flutter IDE
+# Flutter Wars IDE
 
-A lightweight code editor built with Flutter, with a VS Code-inspired interface, Monaco code editing, file navigation, editor tabs, and an integrated terminal.
+A Windows code editor for Flutter Wars, with Monaco editing, an Explorer, a restricted Flutter terminal, and Chrome running.
 
 ## Download for Windows
 
-[Download Flutter IDE 1.0.1 for Windows x64](https://github.com/roopakv-glithub/flutter-IDE/releases/download/v1.0.1-windows/Flutter-IDE-1.0.1-windows-x64.zip)
+[Download Flutter Wars IDE 1.0.2 for Windows x64](https://github.com/roopakv-glithub/flutter-IDE/releases/download/v1.0.2-windows/Flutter-IDE-1.0.2-windows-x64.zip)
 
-[Release notes and SHA-256 checksum](https://github.com/roopakv-glithub/flutter-IDE/releases/tag/v1.0.1-windows)
+[Release notes and SHA-256 checksum](https://github.com/roopakv-glithub/flutter-IDE/releases/tag/v1.0.2-windows)
 
-1. Download the ZIP and choose **Extract All**.
-2. Open the extracted `Flutter-IDE-1.0.1-windows-x64` folder.
-3. Double-click `flutter_ide.exe`.
+Extract the complete ZIP and open `flutter_ide.exe` in the extracted folder. Keep every DLL and the `data` folder alongside the executable.
 
-Keep all DLL files and the `data` folder beside the executable. Do not copy only the EXE or run it from inside the ZIP. You can share the complete ZIP with other Windows users.
+Requirements:
 
-### Requirements
+- Windows 10 or Windows 11, x64.
+- Microsoft Edge WebView2 Runtime for Monaco.
+- Flutter on PATH and Google Chrome to analyze or run participant projects.
+- The Visual C++ runtime DLLs are included. Flutter and Visual Studio are not required just to open the packaged IDE.
 
-- Windows 10 or Windows 11 on an Intel/AMD 64-bit (x64) computer.
-- [Microsoft Edge WebView2 Evergreen Runtime](https://developer.microsoft.com/en-us/microsoft-edge/webview2/) for the code editor. Install it if it is not already present.
-- Flutter and Visual Studio are **not required to launch the packaged IDE**. Visual C++ runtime DLLs are included.
-- To build or run Flutter projects with the Run button or terminal, install Flutter, add its `bin` directory to `PATH`, and install the toolchain for the target platform. Windows Flutter projects require the Visual Studio C++ desktop build tools.
+The release is an unsigned portable application. The Windows build and automated regression tests were checked locally. Interactive editor scrolling, touchpad behavior, and the full Run flow still need manual confirmation on the target computer.
 
-This is an unsigned portable application, not an installer or Microsoft Store package. The packaged release was launched and verified on Windows 10 x64; other computers have not been individually tested.
+## Changes in 1.0.2
 
-## Features
+- Merged the teammate's Flutter Wars event features while retaining Windows terminal keyboard, focus, and UTF-8 fixes.
+- Dart files inside `lib/`, including `main.dart`, are editable. Project configuration and other files have a read-only viewer. Opening `lib/` directly resolves the enclosing project folder.
+- Create, rename, and delete Dart files and folders inside `lib/`. Rename updates tree entries, affected tabs, and file watchers; existing destinations cannot be overwritten. Delete removes tree entries and affected tabs. `lib/` itself and `lib/main.dart` cannot be renamed or deleted.
+- Saves edits before switching files, closing tabs, or running a command.
+- Terminal scrolling has an explicit scrollbar and mouse, touch, and trackpad drag support. Monaco enables smooth scrolling.
+- Run always targets Chrome; the Analyze button runs `flutter analyze`.
+- The Approved Packages sidebar lists five basic packages: `collection`, `intl`, `http`, `shared_preferences`, and `flutter_svg`. Flutter and Dart are supplied by the SDK. Adding a listed package uses the IDE's controlled action.
+- Import PNG, JPG, JPEG, GIF, or WebP images up to 2 MB through Add Image. The IDE copies them into `assets/images/` and updates the assets declaration.
 
-- **Explorer:** folder tree navigation, file creation, folder creation, rename, and delete.
-- **Flutter project view:** organized navigation for `lib`, tests, platform folders, and other project files.
-- **Monaco code editor:** syntax highlighting, automatic saving, and file-change monitoring.
-- **Editor tabs:** open and switch between multiple files.
-- **Terminal:** integrated PTY terminal with a resizable panel.
-- **Run button:** runs `flutter run` for the opened project.
-- **Layout:** dark theme, resizable sidebar, breadcrumbs, and status bar.
+## Terminal commands
 
-The **Source Control/Git sidebar** and **Pub.dev Packages sidebar**, including their service/API integrations, have been removed. Explorer, Terminal, Run, code editing, tabs, file operations, and Flutter project structure remain intact. Git and Flutter package commands can still be entered manually in the terminal when those tools are installed.
+The terminal accepts these fixed commands (extra surrounding or repeated whitespace is ignored):
 
-## Terminal fixes in 1.0.1
+```text
+flutter analyze
+flutter run
+flutter run -d chrome
+flutter doctor
+flutter doctor -v
+flutter devices
+flutter --version
+flutter help
+flutter pub get
+flutter clean
+help
+clear
+```
 
-- Run returns keyboard focus to the terminal, including when it is already open.
-- Windows hardware-key input accepts letters, top-row digits, and numpad digits.
-- Commands use the terminal Enter character, and output decoding handles UTF-8 split across reads.
-- Clear and Close no longer inject shell commands into an active device prompt.
-- Consolas text, increased line spacing, and padding make the terminal easier to read.
+`flutter run` is a shortcut for `flutter run -d chrome`. Doctor, devices, version, and help work without opening a project. Analyze, Run, pub get, and clean require an open project.
 
-## Build and run from source
+While Flutter runs, normal process input such as `r` for hot reload, `R` for hot restart, `q` to quit, and Ctrl+C remains available. Wait for the process to exit before issuing another command.
 
-The Flutter project is at the repository root; there is no separate demo directory.
+Other commands, arbitrary shell syntax, unapproved package additions, and alternative Run targets are blocked. These are IDE workflow restrictions, not an operating-system sandbox.
+
+## Build from source
 
 ```powershell
 git clone https://github.com/roopakv-glithub/flutter-IDE.git
 cd flutter-IDE
 flutter pub get
-flutter run -d windows
-```
-
-The Windows build was verified with Flutter 3.47.6, Dart 3.13.5, Visual Studio Build Tools 2019, and Windows SDK 10.0.19041.0. Enable Windows Developer Mode so Flutter can create plugin symlinks.
-
-If the WebView plugin cannot download its native packages because your NuGet configuration only contains a local cache, enable the official `https://api.nuget.org/v3/index.json` package source.
-
-### Build a Windows release
-
-```powershell
-flutter pub get
 flutter analyze
-flutter build windows --release --build-name=1.0.1 --build-number=2
+flutter test
+flutter build windows --release --build-name=1.0.2 --build-number=3
 ```
 
-The executable and its supporting files are generated in:
+The application is generated in `build/windows/x64/runner/Release/`. Package that entire directory with the x64 Visual C++ redistributable runtime DLLs. The build uses the existing Windows SDK compatibility fix and Font Awesome 11 dependency.
 
-```text
-build/windows/x64/runner/Release/
-```
+Event settings and approved package constraints live in `lib/config/event_config.dart`. File operation rules live in `lib/policy/project_policy.dart`.
 
-For distribution, bundle the executable, every required DLL, the complete `data` directory, and the Visual C++ runtime libraries. Follow [Flutter's Windows packaging documentation](https://docs.flutter.dev/platform-integration/windows/building). Sharing the EXE alone is not sufficient.
+## Manual release checks
 
-### Validation of this release
+Use a disposable Flutter project:
 
-- `flutter pub get`: successful.
-- `flutter analyze`: zero errors and one existing warning for an unused `package:flutter/foundation.dart` import in `lib/services/file_service_io.dart`. The command exits nonzero because of that warning; the unrelated file was left unchanged.
-- `flutter build windows --release --build-name=1.0.1 --build-number=2`: successful.
-- Packaged executable: launched and responding on Windows.
-- Six terminal regression tests and a real Windows ConPTY test: passed (letters, numeric prompts, backspace, focus, and output decoding).
-- All 140 packaged files: verified against the release ZIP.
+1. Edit `lib/main.dart` and another Dart file, switch tabs, and verify saved content.
+2. Rename a file and a nested folder; verify disk names, tabs, and the Explorer.
+3. Delete a spare file and folder; verify tabs close and items stay deleted.
+4. Scroll a long code file and long terminal output with both wheel and touchpad.
+5. Run `flutter doctor`, `flutter analyze`, and `flutter run`; verify Run opens Chrome and hot reload works.
+6. Confirm project configuration stays read-only, approved packages can be added, and other terminal commands are blocked.
 
-## Project structure
-
-```text
-lib/
-  main.dart
-  editor_screen.dart
-  file_tree.dart
-  flutter_sidebar.dart
-  output_panel.dart
-  models/
-  services/
-  widgets/editor/
-windows/
-  CMakeLists.txt
-  runner/
-    winrt_compat.h
-pubspec.yaml
-```
-
-The Windows compatibility header works around a missing forward declaration in Windows SDK 10.0.19041.0. It is applied only to that SDK version. The Font Awesome dependency and icon references are compatible with the Flutter version used for this release.
-
-## Global terminal API
-
-```dart
-import 'editor_screen.dart';
-
-runTerminalCommand('flutter run');
-runTerminalCommand('flutter pub get');
-runTerminalCommand('dart analyze');
-```
-
-## Contributing
-
-Contributions are welcome through pull requests. Keep changes focused and run analysis and the relevant platform build before submitting.
-
-## Support
+## Support and license
 
 [Support the original project author](https://www.buymeacoffee.com/ankurg132)
-
-## License
 
 The original project README identifies the project as MIT-licensed. Third-party dependency notices are bundled in `data/flutter_assets/NOTICES.Z` in the Windows release.

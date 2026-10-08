@@ -11,6 +11,13 @@ class FileTree extends StatefulWidget {
   final Function(FileNode)? onDelete;
   final Function(FileNode)? onRename;
 
+  /// If given, nodes for which this returns false get no Delete menu.
+  final bool Function(FileNode)? canDelete;
+  final bool Function(FileNode)? canRename;
+
+  /// If given, files for which this returns true show a lock icon.
+  final bool Function(FileNode)? isLocked;
+
   const FileTree({
     super.key,
     required this.rootNode,
@@ -19,6 +26,9 @@ class FileTree extends StatefulWidget {
     this.onPickDirectory,
     this.onDelete,
     this.onRename,
+    this.canDelete,
+    this.canRename,
+    this.isLocked,
   });
 
   @override
@@ -36,6 +46,17 @@ class _FileTreeState extends State<FileTree> {
     // Expand root by default
     if (widget.rootNode != null) {
       _expandedPaths.add(widget.rootNode!.path);
+    }
+  }
+
+  @override
+  void didUpdateWidget(FileTree oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.rootNode != null &&
+        oldWidget.rootNode?.path != widget.rootNode!.path) {
+      _expandedPaths.clear();
+      _expandedPaths.add(widget.rootNode!.path);
+      _selectedPath = null;
     }
   }
 
@@ -90,10 +111,9 @@ class _FileTreeState extends State<FileTree> {
             });
             widget.onDirectorySelected(node);
           },
-          onDelete: widget.onDelete != null
-              ? () => widget.onDelete!(node)
-              : null,
-          onRename: widget.onRename != null
+          onDelete: _deleteFor(node),
+          onRename:
+              widget.onRename != null && (widget.canRename?.call(node) ?? true)
               ? () => widget.onRename!(node)
               : null,
           child: Padding(
@@ -147,7 +167,11 @@ class _FileTreeState extends State<FileTree> {
     return widgets;
   }
 
-  // Replaced buildDirectoryItem and buildChildren with recursive list builder
+  VoidCallback? _deleteFor(FileNode node) {
+    if (widget.onDelete == null) return null;
+    if (widget.canDelete != null && !widget.canDelete!(node)) return null;
+    return () => widget.onDelete!(node);
+  }
 
   Widget _buildFileItem(FileNodeFile file, int depth) {
     final bool isSelected = file.path == _selectedPath;
@@ -160,8 +184,11 @@ class _FileTreeState extends State<FileTree> {
         });
         widget.onFileSelected(file);
       },
-      onDelete: widget.onDelete != null ? () => widget.onDelete!(file) : null,
-      onRename: widget.onRename != null ? () => widget.onRename!(file) : null,
+      onDelete: _deleteFor(file),
+      onRename:
+          widget.onRename != null && (widget.canRename?.call(file) ?? true)
+          ? () => widget.onRename!(file)
+          : null,
       child: Padding(
         padding: EdgeInsets.only(
           left: depth * 12.0 + 24,
@@ -184,6 +211,8 @@ class _FileTreeState extends State<FileTree> {
                 overflow: TextOverflow.ellipsis,
               ),
             ),
+            if (widget.isLocked?.call(file) ?? false)
+              const Icon(Icons.lock_outline, size: 12, color: Colors.white38),
           ],
         ),
       ),
@@ -272,7 +301,7 @@ class _HoverableItemState extends State<_HoverableItem> {
       onExit: (_) => setState(() => _isHovered = false),
       child: GestureDetector(
         onTap: widget.onTap,
-        onSecondaryTapDown: widget.onDelete != null
+        onSecondaryTapDown: widget.onDelete != null || widget.onRename != null
             ? (details) => _showContextMenu(context, details.globalPosition)
             : null,
         child: Container(

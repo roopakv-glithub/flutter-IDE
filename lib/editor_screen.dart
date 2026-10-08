@@ -3,16 +3,21 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter_monaco/flutter_monaco.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:path/path.dart' as p;
 import 'package:webview_flutter/webview_flutter.dart';
 import 'models/file_system_entity.dart';
 import 'models/web_tab.dart';
+import 'config/event_config.dart';
+import 'policy/project_policy.dart';
 import 'services/file_service.dart';
+import 'services/pubspec_edit.dart';
 import 'file_tree.dart';
 import 'flutter_sidebar.dart';
 import 'output_panel.dart';
+import 'pubdev_sidebar.dart';
 import 'widgets/editor/activity_bar.dart';
 import 'widgets/editor/editor_tabs.dart';
 import 'widgets/editor/status_bar.dart';
@@ -20,10 +25,13 @@ import 'widgets/editor/welcome_screen.dart';
 import 'widgets/editor/quick_open_dialog.dart';
 import 'widgets/editor/resize_handles.dart';
 
+void _noop() {}
+
 // Global function to run terminal commands from anywhere
 void Function(String command)? _globalRunTerminalCommand;
 
-/// Run a command in the terminal from anywhere in the app
+/// Run an ALLOWED command in the terminal from anywhere in the app.
+/// Anything not in [kTypedCommands] is ignored.
 void runTerminalCommand(String command) {
   _globalRunTerminalCommand?.call(command);
 }
@@ -52,8 +60,12 @@ class _EditorScreenState extends State<EditorScreen> {
   bool _isOutputVisible = false;
   double _terminalHeight = 250;
 
-  // Terminal command to run
-  String? _pendingCommand;
+  // Terminal command to run (always one of the whitelisted commands)
+  AllowedCommand? _pendingCommand;
+
+  // Autosave bookkeeping
+  bool _autoSaveRunning = false;
+  bool _loadingFile = false;
 
   // Resizable sidebar width
   double _sidebarWidth = 250;
@@ -69,7 +81,170 @@ class _EditorScreenState extends State<EditorScreen> {
     super.initState();
     HardwareKeyboard.instance.addHandler(_handleGlobalKeyEvent);
     // Register global terminal command handler
-    _globalRunTerminalCommand = _runTerminalCommand;
+    _globalRunTerminalCommand = _runTypedCommand;
+  }
+
+  // ---------------------------------------------------------------------
+  // Event rules
+  // ---------------------------------------------------------------------
+
+  ProjectPolicy? get _policy =>
+      _rootNode == null ? null : ProjectPolicy(_rootNode!.path);
+
+  bool _canEdit(String path) => _policy?.canEdit(path) ?? false;
+
+  void _toast(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), duration: const Duration(seconds: 3)),
+    );
+  }
+
+  FileNodeDirectory? _findDir(String name) {
+    final root = _rootNode;
+    if (root == null) return null;
+    for (final child in root.children) {
+      if (child is FileNodeDirectory && child.name == name) return child;
+    }
+    return null;
+  }
+
+  /// Source of truth for a file while it is being edited.
+  Future<void> _flushActiveFile() async {
+    final file = _activeFile;
+    final controller = _editorController;
+    if (file == null || controller == null || _loadingFile) return;
+    if (!_canEdit(file.path)) return;
+    try {
+      final content = await controller.getValue();
+      if (content == _currentCode) return;
+      // Don't save if content became empty but wasn't before.
+      if (content.trim().isEmpty && _currentCode.trim().isNotEmpty) return;
+      // The active file may have changed while we awaited.
+      if (_activeFile?.path != file.path) return;
+      _currentCode = content;
+      _recentlySavedFiles.add(file.path);
+      await fileService.saveFile(file, content);
+      Future.delayed(const Duration(milliseconds: 500), () {
+        _recentlySavedFiles.remove(file.path);
+      });
+    } catch (e) {
+      // Save error
+    }
+  }
+
+  Future<void> _addApprovedPackage(String name) async {
+    final command = pubAddCommand(name);
+    if (command == null) {
+      _toast('"$name" is not an approved package.');
+      return;
+    }
+    if (_rootNode == null) {
+      _toast('Open the project folder first.');
+      return;
+    }
+    _runCommand(command);
+    // pubspec.yaml is read-only for participants; refresh it if it is showing.
+    final active = _activeFile;
+    if (active != null && p.basename(active.path) == 'pubspec.yaml') {
+      Future.delayed(const Duration(seconds: 6), () {
+        if (mounted && _activeFile?.path == active.path) _openFile(active);
+      });
+    }
+  }
+
+  Future<void> _addImage() async {
+    final root = _rootNode;
+    if (root == null) {
+      _toast('Open the project folder first.');
+      return;
+    }
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: kAllowedImageExtensions,
+    );
+    final sourcePath = result?.files.single.path;
+    if (sourcePath == null) return;
+
+    try {
+      final source = File(sourcePath);
+      final size = await source.length();
+      if (size > kMaxImageBytes) {
+        _toast(
+          'Image is too large (max ${kMaxImageBytes ~/ (1024 * 1024)} MB).',
+        );
+        return;
+      }
+
+      final ext = p.extension(sourcePath).replaceFirst('.', '').toLowerCase();
+      if (!kAllowedImageExtensions.contains(ext)) {
+        _toast(
+          'Only ${kAllowedImageExtensions.join(', ')} images are allowed.',
+        );
+        return;
+      }
+
+      final assetsDir = Directory(p.join(root.path, kAssetsFolder));
+      await assetsDir.create(recursive: true);
+
+      var name = ProjectPolicy.sanitizeAssetName(p.basename(sourcePath));
+      final stem = p.basenameWithoutExtension(name);
+      var counter = 1;
+      while (await File(p.join(assetsDir.path, name)).exists()) {
+        name = '${stem}_$counter.$ext';
+        counter++;
+      }
+
+      final destPath = p.join(assetsDir.path, name);
+      await source.copy(destPath);
+      await _ensureAssetsDeclared(root.path);
+
+      setState(() {
+        _addToTree(root, [
+          ...kAssetsFolder.split('/'),
+        ], FileNodeFile(name, destPath));
+      });
+      _toast(
+        'Added assets/images/$name  -  use it as Image.asset(\'$kAssetsFolder/$name\')',
+      );
+    } catch (e) {
+      _toast('Could not add image: $e');
+    }
+  }
+
+  /// Adds [file] to the in-memory tree, creating folders as needed.
+  void _addToTree(
+    FileNodeDirectory root,
+    List<String> folders,
+    FileNodeFile file,
+  ) {
+    var current = root;
+    for (final folder in folders) {
+      FileNodeDirectory? next;
+      for (final child in current.children) {
+        if (child is FileNodeDirectory && child.name == folder) next = child;
+      }
+      if (next == null) {
+        next = FileNodeDirectory(
+          folder,
+          p.join(current.path, folder),
+          children: <FileNode>[],
+        );
+        current.children.add(next);
+      }
+      current = next;
+    }
+    current.children.add(file);
+  }
+
+  /// Makes sure pubspec.yaml lists the assets folder (done by the IDE, because
+  /// participants cannot edit pubspec.yaml themselves).
+  Future<void> _ensureAssetsDeclared(String rootPath) async {
+    final pubspec = File(p.join(rootPath, 'pubspec.yaml'));
+    if (!await pubspec.exists()) return;
+    final text = await pubspec.readAsString();
+    final updated = addAssetsDeclaration(text, '$kAssetsFolder/');
+    if (updated != null) await pubspec.writeAsString(updated);
   }
 
   WebViewController _getOrCreateWebViewController(String url) {
@@ -142,20 +317,22 @@ class _EditorScreenState extends State<EditorScreen> {
 
     try {
       final fileEntity = File(file.path);
-      final subscription = fileEntity.watch(events: FileSystemEvent.modify).listen(
-        (event) {
-          if (event.type == FileSystemEvent.modify) {
-            // Skip reload if we recently saved this file ourselves
-            if (_recentlySavedFiles.contains(file.path)) {
-              return;
-            }
-            _reloadFileContent(file);
-          }
-        },
-        onError: (error) {
-          // File watching failed, ignore silently
-        },
-      );
+      final subscription = fileEntity
+          .watch(events: FileSystemEvent.modify)
+          .listen(
+            (event) {
+              if (event.type == FileSystemEvent.modify) {
+                // Skip reload if we recently saved this file ourselves
+                if (_recentlySavedFiles.contains(file.path)) {
+                  return;
+                }
+                _reloadFileContent(file);
+              }
+            },
+            onError: (error) {
+              // File watching failed, ignore silently
+            },
+          );
       _fileWatchers[file.path] = subscription;
     } catch (e) {
       // File watching not supported or failed
@@ -176,7 +353,9 @@ class _EditorScreenState extends State<EditorScreen> {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('${file.name} was modified externally and reloaded'),
+                content: Text(
+                  '${file.name} was modified externally and reloaded',
+                ),
                 duration: const Duration(seconds: 2),
               ),
             );
@@ -196,7 +375,9 @@ class _EditorScreenState extends State<EditorScreen> {
   bool _handleGlobalKeyEvent(KeyEvent event) {
     if (event is! KeyDownEvent) return false;
 
-    final isMetaPressed = HardwareKeyboard.instance.isMetaPressed;
+    final isMetaPressed =
+        HardwareKeyboard.instance.isMetaPressed ||
+        HardwareKeyboard.instance.isControlPressed;
 
     if (isMetaPressed && event.logicalKey == LogicalKeyboardKey.keyP) {
       _showQuickOpen();
@@ -213,8 +394,16 @@ class _EditorScreenState extends State<EditorScreen> {
 
   Future<void> _pickDirectory() async {
     final root = await fileService.pickDirectory();
-    if (root != null) {
+    if (root != null && mounted) {
+      await _flushActiveFile();
+      for (final path in _fileWatchers.keys.toList()) {
+        _stopWatchingFile(path);
+      }
       setState(() {
+        _openFiles.clear();
+        _activeFile = null;
+        _selectedDirectory = null;
+        _editorController = null;
         _rootNode = root;
       });
     }
@@ -223,11 +412,21 @@ class _EditorScreenState extends State<EditorScreen> {
   FileNodeDirectory? _selectedDirectory;
 
   Future<void> _createNewFile() async {
-    final targetDir = _selectedDirectory ?? _rootNode;
+    final targetDir = _selectedDirectory ?? _findDir(kEditableFolder);
     if (targetDir == null) return;
+    if (!(_policy?.canCreateIn(targetDir.path) ?? false)) {
+      _toast('You can only create files inside $kEditableFolder/.');
+      return;
+    }
 
-    final name = await _showNameDialog('New File', 'Enter file name');
+    final name = await _showNameDialog('New File', 'Enter file name (.dart)');
     if (name == null || name.isEmpty) return;
+    if (!ProjectPolicy.isValidDartFileName(name)) {
+      _toast(
+        'File names must be simple and end in .dart (e.g. my_screen.dart).',
+      );
+      return;
+    }
 
     final newFile = await fileService.createFile(targetDir.path, name);
     if (newFile != null) {
@@ -235,53 +434,44 @@ class _EditorScreenState extends State<EditorScreen> {
         targetDir.children.add(newFile);
       });
       await _openFile(newFile);
+    } else {
+      _toast('Could not create $name (it may already exist).');
     }
   }
 
   Future<void> _createNewFolder() async {
-    final targetDir = _selectedDirectory ?? _rootNode;
+    final targetDir = _selectedDirectory ?? _findDir(kEditableFolder);
     if (targetDir == null) return;
+    if (!(_policy?.canCreateIn(targetDir.path) ?? false)) {
+      _toast('You can only create folders inside $kEditableFolder/.');
+      return;
+    }
 
     final name = await _showNameDialog('New Folder', 'Enter folder name');
     if (name == null || name.isEmpty) return;
+    if (!ProjectPolicy.isValidName(name)) {
+      _toast('Folder names can only use letters, numbers, _ - and .');
+      return;
+    }
 
     final newDir = await fileService.createDirectory(targetDir.path, name);
     if (newDir != null) {
       setState(() {
         targetDir.children.add(newDir);
       });
+    } else {
+      _toast('Could not create $name (it may already exist).');
     }
   }
 
   void _startAutoSave() {
+    if (_autoSaveRunning) return;
+    _autoSaveRunning = true;
     Future.doWhile(() async {
       if (!mounted) return false;
       await Future.delayed(const Duration(seconds: 2));
       if (!mounted) return false;
-
-      if (_activeFile != null && _editorController != null) {
-        try {
-          final content = await _editorController!.getValue();
-
-          if (content != _currentCode) {
-            // Don't save if content became empty but wasn't before (prevents accidental data loss)
-            if (content.trim().isEmpty && _currentCode.trim().isNotEmpty) {
-              return true; // Continue polling
-            }
-            _currentCode = content;
-            // Mark as recently saved to prevent file watcher from reloading
-            final filePath = _activeFile!.path;
-            _recentlySavedFiles.add(filePath);
-            await fileService.saveFile(_activeFile!, content);
-            // Remove from recently saved after a short delay
-            Future.delayed(const Duration(milliseconds: 500), () {
-              _recentlySavedFiles.remove(filePath);
-            });
-          }
-        } catch (e) {
-          // Auto-save error
-        }
-      }
+      await _flushActiveFile();
       return true;
     });
   }
@@ -322,11 +512,25 @@ class _EditorScreenState extends State<EditorScreen> {
     });
   }
 
-  void _runTerminalCommand(String command) {
+  /// Runs a whitelisted command in the terminal panel.
+  Future<void> _runCommand(AllowedCommand command) async {
+    await _flushActiveFile();
+    if (!mounted) return;
     setState(() {
       _isOutputVisible = true;
       _pendingCommand = command;
     });
+  }
+
+  /// Same, but from text: only exact whitelist matches are accepted.
+  void _runTypedCommand(String text) {
+    final normalized = text.trim().replaceAll(RegExp(r'\s+'), ' ');
+    final command = kTypedCommands[normalized];
+    if (command == null) {
+      _toast('Blocked: "$normalized" is not an allowed command.');
+      return;
+    }
+    _runCommand(command);
   }
 
   void _toggleOutput() {
@@ -370,9 +574,24 @@ class _EditorScreenState extends State<EditorScreen> {
     );
   }
 
+  bool _removeFromTree(FileNodeDirectory dir, FileNode target) {
+    if (dir.children.remove(target)) return true;
+    for (final child in dir.children) {
+      if (child is FileNodeDirectory && _removeFromTree(child, target)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   Future<void> _deleteNode(FileNode node) async {
     final isDirectory = node is FileNodeDirectory;
     final name = node.name;
+
+    if (!(_policy?.canDelete(node.path, isDirectory: isDirectory) ?? false)) {
+      _toast('"$name" is protected and cannot be deleted.');
+      return;
+    }
 
     // Show confirmation dialog
     final confirmed = await showDialog<bool>(
@@ -396,7 +615,9 @@ class _EditorScreenState extends State<EditorScreen> {
       ),
     );
 
-    if (confirmed != true) return;
+    if (confirmed != true || !mounted) return;
+    await _flushActiveFile();
+    _loadingFile = true;
 
     // Perform deletion
     bool success;
@@ -406,17 +627,42 @@ class _EditorScreenState extends State<EditorScreen> {
       success = await fileService.deleteFile(node.path);
     }
 
+    _loadingFile = false;
+    if (!mounted) return;
     if (success) {
-      // Close the file if it was open
-      if (node is FileNodeFile) {
-        _closeFile(node);
+      final affected = _openFiles
+          .where(
+            (file) =>
+                file.path == node.path || p.isWithin(node.path, file.path),
+          )
+          .toList();
+      final activeDeleted = affected.any(
+        (file) => file.path == _activeFile?.path,
+      );
+      for (final file in affected) {
+        _stopWatchingFile(file.path);
+      }
+      setState(() {
+        _openFiles.removeWhere((file) => affected.contains(file));
+        if (activeDeleted) {
+          _activeFile = null;
+          _currentCode = '// Open a file to start editing\n';
+        }
+      });
+      if (activeDeleted && _openFiles.isNotEmpty) {
+        await _openFile(_openFiles.last);
+      }
+      if (_selectedDirectory != null &&
+          (node.path == _selectedDirectory!.path ||
+              p.isWithin(node.path, _selectedDirectory!.path))) {
+        _selectedDirectory = null;
       }
 
       // Refresh the file tree
       if (_rootNode != null) {
-        await fileService.pickDirectory();
         setState(() {
-          // The tree will update on next rebuild
+          _removeFromTree(_rootNode!, node);
+          if (_selectedDirectory?.path == node.path) _selectedDirectory = null;
         });
       }
 
@@ -435,52 +681,78 @@ class _EditorScreenState extends State<EditorScreen> {
   }
 
   Future<void> _renameNode(FileNode node) async {
-    final oldName = node.name;
-
-    // Show rename dialog
-    final newName = await _showNameDialog(
-      'Rename ${node is FileNodeDirectory ? 'Folder' : 'File'}',
+    final directory = node is FileNodeDirectory;
+    final name = await _showNameDialog(
+      directory ? 'Rename Folder' : 'Rename File',
       'New name',
     );
-
-    if (newName == null || newName.isEmpty || newName == oldName) return;
-
-    // Perform rename
-    final success = await fileService.rename(node.path, newName);
-
-    if (success) {
-      // Update open file if it was renamed
-      if (node is FileNodeFile && _activeFile?.path == node.path) {
-        final newPath = p.join(p.dirname(node.path), newName);
-        setState(() {
-          _activeFile = FileNodeFile(newName, newPath);
-          // Update in open files list
-          final index = _openFiles.indexWhere((f) => f.path == node.path);
-          if (index != -1) {
-            _openFiles[index] = _activeFile!;
-          }
-        });
+    if (name == null || name == node.name || !mounted) return;
+    if (!(_policy?.canRename(node.path, name, isDirectory: directory) ??
+        false)) {
+      _toast(
+        'Use a valid ${directory ? "folder" : ".dart file"} name inside lib/.',
+      );
+      return;
+    }
+    await _flushActiveFile();
+    _loadingFile = true;
+    final success = await fileService.rename(node.path, name);
+    _loadingFile = false;
+    if (!mounted) return;
+    if (!success) {
+      _toast(
+        'Could not rename ${node.name}; check whether the name already exists.',
+      );
+      return;
+    }
+    final newPath = p.join(p.dirname(node.path), name);
+    FileNode remap(FileNode item) {
+      final path = item.path == node.path
+          ? newPath
+          : p.join(newPath, p.relative(item.path, from: node.path));
+      if (item is FileNodeDirectory) {
+        return FileNodeDirectory(
+          p.basename(path),
+          path,
+          children: item.children.map(remap).toList(),
+        );
       }
+      return FileNodeFile(p.basename(path), path);
+    }
 
-      // Refresh the file tree (ideally we'd update in place)
-      if (_rootNode != null) {
-        setState(() {
-          // Tree will update on rebuild
-        });
+    final replacement = remap(node);
+    void replaceIn(FileNodeDirectory parent) {
+      final index = parent.children.indexWhere(
+        (child) => child.path == node.path,
+      );
+      if (index >= 0) {
+        parent.children[index] = replacement;
+        return;
       }
-
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Renamed to $newName')));
-      }
-    } else {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Failed to rename $oldName')));
+      for (final child in parent.children.whereType<FileNodeDirectory>()) {
+        replaceIn(child);
       }
     }
+
+    setState(() {
+      replaceIn(_rootNode!);
+      for (var i = 0; i < _openFiles.length; i++) {
+        final file = _openFiles[i];
+        if (file.path == node.path || p.isWithin(node.path, file.path)) {
+          _stopWatchingFile(file.path);
+          final updated = remap(file) as FileNodeFile;
+          _openFiles[i] = updated;
+          if (_activeFile?.path == file.path) _activeFile = updated;
+          _watchFile(updated);
+        }
+      }
+      if (_selectedDirectory != null &&
+          (_selectedDirectory!.path == node.path ||
+              p.isWithin(node.path, _selectedDirectory!.path))) {
+        _selectedDirectory = null;
+      }
+    });
+    _toast('Renamed to $name');
   }
 
   Future<String?> _showNameDialog(String title, String label) async {
@@ -502,39 +774,47 @@ class _EditorScreenState extends State<EditorScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(controller.text),
-            child: const Text('Create'),
+            child: Text(title.startsWith('Rename') ? 'Rename' : 'Create'),
           ),
         ],
       ),
     );
   }
 
+  static const _imageExtensions = {'.png', '.jpg', '.jpeg', '.gif', '.webp'};
+
+  bool _isImage(String path) =>
+      _imageExtensions.contains(p.extension(path).toLowerCase());
+
   Future<void> _openFile(FileNodeFile file) async {
-    if (!_openFiles.any((f) => f.path == file.path)) {
-      setState(() {
-        _openFiles.add(file);
-      });
-      // Start watching this file for external changes
-      _watchFile(file);
-    }
-
-    // Set active even if already open
-    setState(() {
-      _activeFile = file;
-    });
-
+    await _flushActiveFile();
+    _loadingFile = true;
     try {
-      final content = await fileService.readFile(file) ?? '';
-      setState(() {
-        _currentCode = content;
-      });
+      // Images are shown as pictures, not read as text.
+      final content = _isImage(file.path)
+          ? ''
+          : (await fileService.readFile(file) ?? '');
+      if (!mounted) return;
 
-      _editorController?.setValue(_currentCode);
-      try {
-        final language = _getLanguage(file.path);
-        _editorController?.setLanguage(language);
-      } catch (e) {
-        // Error setting language
+      final editable = _canEdit(file.path);
+      final isNew = !_openFiles.any((f) => f.path == file.path);
+
+      setState(() {
+        if (isNew) _openFiles.add(file);
+        _activeFile = file;
+        _activeWebTab = null;
+        _currentCode = content;
+        if (!editable) _editorController = null; // editor is not on screen
+      });
+      if (isNew) _watchFile(file);
+
+      if (editable) {
+        try {
+          _editorController?.setValue(_currentCode);
+          _editorController?.setLanguage(_getLanguage(file.path));
+        } catch (e) {
+          // Editor not ready yet: it will start from initialValue instead.
+        }
       }
     } catch (e) {
       if (mounted) {
@@ -542,10 +822,14 @@ class _EditorScreenState extends State<EditorScreen> {
           context,
         ).showSnackBar(SnackBar(content: Text('Error reading file: $e')));
       }
+    } finally {
+      _loadingFile = false;
     }
   }
 
-  void _closeFile(FileNodeFile file) {
+  Future<void> _closeFile(FileNodeFile file) async {
+    await _flushActiveFile();
+    if (!mounted) return;
     // Stop watching this file
     _stopWatchingFile(file.path);
 
@@ -553,12 +837,19 @@ class _EditorScreenState extends State<EditorScreen> {
       _openFiles.removeWhere((f) => f.path == file.path);
       if (_activeFile?.path == file.path) {
         if (_openFiles.isNotEmpty) {
-          _activeFile = _openFiles.last;
-          _openFile(_activeFile!); // Load the new active file
+          final next = _openFiles.last;
+          _activeFile = null;
+          _openFile(
+            next,
+          ); // Load the new active file without saving stale editor text.
         } else {
           _activeFile = null;
           _currentCode = '// Open a file to start editing\n';
-          _editorController?.setValue(_currentCode);
+          try {
+            _editorController?.setValue(_currentCode);
+          } catch (e) {
+            // Editor is not on screen
+          }
         }
       }
     });
@@ -616,11 +907,23 @@ class _EditorScreenState extends State<EditorScreen> {
                       onPickDirectory: _pickDirectory,
                     ),
                   ),
+                if (_selectedActivityIndex == 2)
+                  SizedBox(
+                    width: _sidebarWidth + 50, // PubDev sidebar is wider
+                    child: PubDevSidebar(
+                      onOpenInBrowser: _openWebTab,
+                      onAddPackage: _addApprovedPackage,
+                    ),
+                  ),
+
                 // Horizontal resize handle for sidebar
                 HorizontalResizeHandle(
                   onDrag: (delta) {
                     setState(() {
-                      _sidebarWidth = (_sidebarWidth + delta).clamp(150.0, 500.0);
+                      _sidebarWidth = (_sidebarWidth + delta).clamp(
+                        150.0,
+                        500.0,
+                      );
                     });
                   },
                 ),
@@ -633,19 +936,24 @@ class _EditorScreenState extends State<EditorScreen> {
                       _buildTabBar(),
 
                       // Breadcrumbs
-                      if (_activeFile != null && _activeWebTab == null) _buildBreadcrumbs(),
+                      if (_activeFile != null && _activeWebTab == null)
+                        _buildBreadcrumbs(),
 
                       // Editor, WebView, or Welcome Screen
                       Expanded(
                         child: _activeWebTab != null
                             ? _buildWebView()
                             : _activeFile == null
-                                ? WelcomeScreen(
-                                    rootName: _rootNode?.name,
-                                    onPickDirectory: _pickDirectory,
-                                    onCreateNewFile: _rootNode != null ? _createNewFile : null,
-                                  )
-                                : _buildEditor(),
+                            ? WelcomeScreen(
+                                rootName: _rootNode?.name,
+                                onPickDirectory: _pickDirectory,
+                                onCreateNewFile: _rootNode != null
+                                    ? _createNewFile
+                                    : null,
+                              )
+                            : _canEdit(_activeFile!.path)
+                            ? _buildEditor()
+                            : _buildReadOnlyViewer(),
                       ),
 
                       // Vertical resize handle for terminal
@@ -653,7 +961,10 @@ class _EditorScreenState extends State<EditorScreen> {
                         VerticalResizeHandle(
                           onDrag: (delta) {
                             setState(() {
-                              _terminalHeight = (_terminalHeight - delta).clamp(100.0, 500.0);
+                              _terminalHeight = (_terminalHeight - delta).clamp(
+                                100.0,
+                                500.0,
+                              );
                             });
                           },
                         ),
@@ -663,7 +974,7 @@ class _EditorScreenState extends State<EditorScreen> {
                         isVisible: _isOutputVisible,
                         height: _terminalHeight,
                         workingDirectory: _rootNode?.path,
-                        initialCommand: _pendingCommand,
+                        pendingCommand: _pendingCommand,
                         onCloseTerminal: () {
                           setState(() {
                             _isOutputVisible = false;
@@ -693,6 +1004,7 @@ class _EditorScreenState extends State<EditorScreen> {
     final activities = [
       (Icons.insert_drive_file_outlined, 'Explorer'),
       (Icons.explore, 'Flutter explorer'),
+      (Icons.inventory_2_outlined, 'Approved Packages'),
     ];
 
     return Container(
@@ -755,6 +1067,12 @@ class _EditorScreenState extends State<EditorScreen> {
                       ),
                       const SizedBox(width: 4),
                       SidebarIconButton(
+                        icon: Icons.add_photo_alternate_outlined,
+                        tooltip: 'Add Image',
+                        onPressed: _addImage,
+                      ),
+                      const SizedBox(width: 4),
+                      SidebarIconButton(
                         icon: Icons.folder_open,
                         tooltip: 'Open Folder',
                         onPressed: _pickDirectory,
@@ -809,6 +1127,19 @@ class _EditorScreenState extends State<EditorScreen> {
               onPickDirectory: _pickDirectory,
               onDelete: _deleteNode,
               onRename: _renameNode,
+              canRename: (node) =>
+                  _policy?.canDelete(
+                    node.path,
+                    isDirectory: node is FileNodeDirectory,
+                  ) ??
+                  false,
+              canDelete: (node) =>
+                  _policy?.canDelete(
+                    node.path,
+                    isDirectory: node is FileNodeDirectory,
+                  ) ??
+                  false,
+              isLocked: (node) => node is FileNodeFile && !_canEdit(node.path),
             ),
           ),
         ],
@@ -831,7 +1162,8 @@ class _EditorScreenState extends State<EditorScreen> {
               children: [
                 // File tabs
                 ..._openFiles.map((file) {
-                  final isActive = file.path == _activeFile?.path && _activeWebTab == null;
+                  final isActive =
+                      file.path == _activeFile?.path && _activeWebTab == null;
                   return EditorTab(
                     file: file,
                     isActive: isActive,
@@ -867,9 +1199,21 @@ class _EditorScreenState extends State<EditorScreen> {
           // Actions
           if (_rootNode != null)
             IconButton(
+              icon: const Icon(
+                Icons.fact_check_outlined,
+                color: Colors.white54,
+                size: 20,
+              ),
+              tooltip: 'Analyze (flutter analyze)',
+              onPressed: () => _runCommand(kCmdAnalyze),
+              padding: const EdgeInsets.all(8),
+            ),
+
+          if (_rootNode != null)
+            IconButton(
               icon: const Icon(Icons.play_arrow, color: Colors.green, size: 20),
-              tooltip: 'Run App (flutter run)',
-              onPressed: () => _runTerminalCommand('flutter run'),
+              tooltip: 'Run in Chrome (flutter run -d $kRunDevice)',
+              onPressed: () => _runCommand(kCmdRunChrome),
               padding: const EdgeInsets.all(8),
             ),
 
@@ -927,10 +1271,6 @@ class _EditorScreenState extends State<EditorScreen> {
 
   Widget _buildEditor() {
     return Listener(
-      onPointerDown: (_) {
-        if (HardwareKeyboard.instance.isMetaPressed) {
-        }
-      },
       child: MonacoEditor(
         loadingBuilder: (context) => Container(
           color: const Color(0xFF1E1E1E),
@@ -943,11 +1283,57 @@ class _EditorScreenState extends State<EditorScreen> {
           language: MonacoLanguage.dart,
           theme: MonacoTheme.vsDark,
           automaticLayout: true,
+          readOnly: false,
+          smoothScrolling: true,
         ),
         onReady: (controller) {
           _editorController = controller;
           _startAutoSave();
         },
+      ),
+    );
+  }
+
+  Widget _buildReadOnlyViewer() {
+    final file = _activeFile!;
+    return Container(
+      color: const Color(0xFF1E1E1E),
+      child: Column(
+        children: [
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            color: const Color(0xFF3A3A1E),
+            child: const Row(
+              children: [
+                Icon(Icons.lock_outline, size: 14, color: Colors.amber),
+                SizedBox(width: 8),
+                Text(
+                  'Read-only - this file is locked for the event.',
+                  style: TextStyle(color: Colors.amber, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: _isImage(file.path)
+                ? Center(child: Image.file(File(file.path)))
+                : SingleChildScrollView(
+                    padding: const EdgeInsets.all(12),
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: SelectableText(
+                        _currentCode,
+                        style: const TextStyle(
+                          color: Colors.white70,
+                          fontSize: 13,
+                          fontFamily: 'monospace',
+                        ),
+                      ),
+                    ),
+                  ),
+          ),
+        ],
       ),
     );
   }
@@ -969,7 +1355,10 @@ class _EditorScreenState extends State<EditorScreen> {
                 const SizedBox(width: 8),
                 Expanded(
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
                     decoration: BoxDecoration(
                       color: const Color(0xFF3C3C3C),
                       borderRadius: BorderRadius.circular(4),
@@ -1009,6 +1398,13 @@ class _EditorScreenState extends State<EditorScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 8),
       child: Row(
         children: [
+          if (_activeFile != null && !_canEdit(_activeFile!.path)) ...[
+            const StatusBarItem(
+              icon: Icons.lock_outline,
+              label: 'Read-only',
+              onPressed: _noop,
+            ),
+          ],
           const Spacer(),
 
           // Right side
