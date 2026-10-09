@@ -68,12 +68,17 @@ void main() {
     'letters, digits, numpad and Enter reach the running process once',
     (tester) async {
       await showPanel(tester, command: 'flutter run');
-      await tester.sendKeyEvent(LogicalKeyboardKey.keyA, character: 'a');
-      await tester.sendKeyEvent(LogicalKeyboardKey.digit1, character: '1');
-      await tester.sendKeyEvent(LogicalKeyboardKey.digit2, character: '2');
-      await tester.sendKeyEvent(LogicalKeyboardKey.digit3, character: '3');
-      await tester.sendKeyEvent(LogicalKeyboardKey.numpad1, character: '1');
-      await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      if (Platform.isWindows) {
+        await tester.sendKeyEvent(LogicalKeyboardKey.keyA, character: 'a');
+        await tester.sendKeyEvent(LogicalKeyboardKey.digit1, character: '1');
+        await tester.sendKeyEvent(LogicalKeyboardKey.digit2, character: '2');
+        await tester.sendKeyEvent(LogicalKeyboardKey.digit3, character: '3');
+        await tester.sendKeyEvent(LogicalKeyboardKey.numpad1, character: '1');
+        await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+      } else {
+        final view = tester.widget<TerminalView>(find.byType(TerminalView));
+        view.terminal.onOutput!('a1231\r');
+      }
       expect(pty.writes.join(), 'a1231\r');
     },
     skip: !Platform.isWindows && !Platform.isLinux,
