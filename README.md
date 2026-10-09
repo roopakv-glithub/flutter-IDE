@@ -25,7 +25,7 @@ Ubuntu 24.04 LTS on x86_64 (amd64) is the only Linux distro and architecture tar
 
 | Distro | CPU architecture | Validation status |
 | --- | --- | --- |
-| Ubuntu 24.04 LTS | x86_64 (amd64) | Dedicated GitHub Actions build and test; first branch run pending |
+| Ubuntu 24.04 LTS | x86_64 (amd64) | Build and tests passed in [Platform CI run 3](https://github.com/roopakv-glithub/flutter-IDE/actions/runs/37953389411) |
 
 The Linux release is published separately from Windows releases:
 
