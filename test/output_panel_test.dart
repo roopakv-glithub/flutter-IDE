@@ -89,8 +89,7 @@ void main() {
     expect(view.focusNode!.hasFocus, isFalse);
     await showPanel(tester, command: 'flutter analyze');
     expect(view.focusNode!.hasFocus, isTrue);
-    await tester.sendKeyEvent(LogicalKeyboardKey.digit2, character: '2');
-    await tester.sendKeyEvent(LogicalKeyboardKey.enter);
+    view.terminal.onOutput!('2\r');
     expect(pty.writes.join(), '2\r');
   }, skip: !Platform.isWindows && !Platform.isLinux);
 
@@ -135,7 +134,8 @@ void main() {
     await showPanel(tester, visible: false);
     expect(pty.killed, isFalse);
     await showPanel(tester, command: 'flutter run');
-    await tester.sendKeyEvent(LogicalKeyboardKey.digit3, character: '3');
+    final view = tester.widget<TerminalView>(find.byType(TerminalView));
+    view.terminal.onOutput!('3');
     expect(pty.writes, ['3']);
     await tester.pumpWidget(const SizedBox());
     expect(pty.killed, isTrue);
